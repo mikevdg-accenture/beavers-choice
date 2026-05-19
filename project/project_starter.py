@@ -8,11 +8,12 @@ from sqlalchemy.sql import text
 from datetime import datetime, timedelta
 from typing import Dict, List, Union
 from sqlalchemy import create_engine, Engine
+from smolagents import ToolCallingAgent, OpenAIServerModel, tool
 
 # Create an SQLite database
 db_engine = create_engine("sqlite:///munder_difflin.db")
 
-# List containing the different kinds of papers 
+# List containing the different kinds of papers
 paper_supplies = [
     # Paper Types (priced per sheet unless specified)
     {"item_name": "A4 paper",                         "category": "paper",        "unit_price": 0.05},
@@ -126,7 +127,7 @@ def generate_sample_inventory(paper_supplies: list, coverage: float = 0.4, seed:
     # Return inventory as a pandas DataFrame
     return pd.DataFrame(inventory)
 
-def init_database(db_engine: Engine, seed: int = 137) -> Engine:    
+def init_database(db_engine: Engine, seed: int = 137) -> Engine:
     """
     Set up the Munder Difflin database with all required tables and initial records.
 
@@ -296,7 +297,7 @@ def get_all_inventory(as_of_date: str) -> Dict[str, int]:
     """
     Retrieve a snapshot of available inventory as of a specific date.
 
-    This function calculates the net quantity of each item by summing 
+    This function calculates the net quantity of each item by summing
     all stock orders and subtracting all sales up to and including the given date.
 
     Only items with positive stock are included in the result.
@@ -333,7 +334,7 @@ def get_stock_level(item_name: str, as_of_date: Union[str, datetime]) -> pd.Data
     """
     Retrieve the stock level of a specific item as of a given date.
 
-    This function calculates the net stock by summing all 'stock_orders' and 
+    This function calculates the net stock by summing all 'stock_orders' and
     subtracting all 'sales' transactions for the specified item up to the given date.
 
     Args:
@@ -590,6 +591,14 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
 
 
 # Set up and load your env parameters and instantiate your model.
+dotenv.load_dotenv()
+
+OPENAI_API_KEY = os.getenv("UDACITY_OPENAI_API_KEY")
+
+if OPENAI_API_KEY.startswith("voc"):
+    API_BASE = "https://openai.vocareum.com/v1"
+else:
+    raise Error("We do not support OpenAI keys here sorry.")
 
 
 """Set up tools for your agents to use, these should be methods that combine the database functions above
@@ -597,23 +606,47 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
 
 
 # Tools for inventory agent
+@tool
+def check_inventory():
+    """ Check inventory for different paper types."""
+    raise NotImplementedError()
 
-
+@tool
 # Tools for quoting agent
-
+def get_quote_history():
+    """ Get the quote history related to a customer's request."""
+    raise NotImplementedError()
 
 # Tools for ordering agent
+@tool
+def get_delivery_timeline():
+    """ Check the timeline for delivery of an item from the supplier."""
+    raise NotImplementedError()
+
+@tool
+def fulfill_order():
+    """ Fullfill order by updating the system database. """
+    raise NotImplementedError()
 
 
-# Set up your agents and create an orchestration agent that will manage them.
+class OrchestrationAgent(ToolCallingAgent):
+    def __init__(self, model, tools):
+        super().__init__(model, tools, name="orchestrator", description="Orchestrates the execution of other agents to fulfill orders.")
 
+class InventoryAgent(ToolCallingAgent):
+    def __init__(self, model, tools):
+        super().__init__(model, tools, name="inventory", description="Manages the inventory of products.")
+
+class QuoteAgent(ToolCallingAgent):
+    def __init__(self, model, tools):
+        super().__init__(model, tools, name="quote", description="Generates quotes for products based on inventory availability.")
 
 # Run your test scenarios by writing them here. Make sure to keep track of them.
 
 def run_test_scenarios():
-    
+
     print("Initializing Database...")
-    init_database()
+    init_database(db_engine)
     try:
         quote_requests_sample = pd.read_csv("quote_requests_sample.csv")
         quote_requests_sample["request_date"] = pd.to_datetime(
@@ -631,13 +664,15 @@ def run_test_scenarios():
     current_cash = report["cash_balance"]
     current_inventory = report["inventory_value"]
 
-    ############
-    ############
-    ############
-    # INITIALIZE YOUR MULTI AGENT SYSTEM HERE
-    ############
-    ############
-    ############
+    # Initialize agents
+    model = OpenAIServerModel(
+        model_id="gpt-4o-mini",
+        api_key=OPENAI_API_KEY,
+        api_base=API_BASE,
+    )
+
+    agent : ToolCallingAgent = OrchestrationAgent(model=model, tools=[check_inventory, get_quote_history, get_delivery_timeline, fulfill_order])
+
 
     results = []
     for idx, row in quote_requests_sample.iterrows():
@@ -649,18 +684,8 @@ def run_test_scenarios():
         print(f"Cash Balance: ${current_cash:.2f}")
         print(f"Inventory Value: ${current_inventory:.2f}")
 
-        # Process request
         request_with_date = f"{row['request']} (Date of request: {request_date})"
-
-        ############
-        ############
-        ############
-        # USE YOUR MULTI AGENT SYSTEM TO HANDLE THE REQUEST
-        ############
-        ############
-        ############
-
-        # response = call_your_multi_agent_system(request_with_date)
+        response = agent.run(request_with_date)
 
         # Update state
         report = generate_financial_report(request_date)
@@ -681,6 +706,8 @@ def run_test_scenarios():
             }
         )
 
+        # TODO - for debugging only
+        break
         time.sleep(1)
 
     # Final report
