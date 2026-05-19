@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Union
 from sqlalchemy import create_engine, Engine
 from smolagents import ToolCallingAgent, OpenAIServerModel, tool
+from smolagents.memory import ActionStep
 
 # Create an SQLite database
 db_engine = create_engine("sqlite:///munder_difflin.db")
@@ -609,24 +610,28 @@ else:
 @tool
 def check_inventory():
     """ Check inventory for different paper types."""
-    raise NotImplementedError()
+    print("Not implemented: check_inventory")
+    exit(-1)
 
-@tool
 # Tools for quoting agent
+@tool
 def get_quote_history():
     """ Get the quote history related to a customer's request."""
-    raise NotImplementedError()
+    print("Not implemented: get_quote_history")
+    exit(-1)
 
 # Tools for ordering agent
 @tool
 def get_delivery_timeline():
     """ Check the timeline for delivery of an item from the supplier."""
-    raise NotImplementedError()
+    print("Not implemented: get_delivery_timeline")
+    exit(-1)
 
 @tool
 def fulfill_order():
     """ Fullfill order by updating the system database. """
-    raise NotImplementedError()
+    print("Not implemented: fulfill_order")
+    exit(-1)
 
 
 class OrchestrationAgent(ToolCallingAgent):
@@ -646,6 +651,11 @@ class SalesFinalisationAgent(ToolCallingAgent):
         super().__init__(model=model, tools=tools, name="sales_finalisation", description="Finalises sales orders by updating inventory and generating invoices.")
 
 # Run your test scenarios by writing them here. Make sure to keep track of them.
+
+
+def stop_on_not_implemented(step: ActionStep, agent):
+    if isinstance(step.error, NotImplementedError):
+        raise step.error  # propagates out of agent.run()
 
 def run_test_scenarios():
 
@@ -675,7 +685,10 @@ def run_test_scenarios():
         api_base=API_BASE,
     )
 
-    agent : ToolCallingAgent = OrchestrationAgent(model=model, tools=[check_inventory, get_quote_history, get_delivery_timeline, fulfill_order])
+    agent : ToolCallingAgent = OrchestrationAgent(
+        model=model,
+        tools=[check_inventory, get_quote_history, get_delivery_timeline, fulfill_order]
+    )
 
 
     results = []
