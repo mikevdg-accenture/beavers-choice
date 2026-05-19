@@ -36,7 +36,6 @@ env/
 ENV/
 
 # IDEs
-.vscode/
 .idea/
 *.swp
 *.swo
