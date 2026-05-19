@@ -641,6 +641,10 @@ class QuoteAgent(ToolCallingAgent):
     def __init__(self, model, tools):
         super().__init__(model, tools, name="quote", description="Generates quotes for products based on inventory availability.")
 
+class SalesFinalisationAgent(ToolCallingAgent):
+    def __init__(self, model, tools):
+        super().__init__(model, tools, name="sales_finalisation", description="Finalises sales orders by updating inventory and generating invoices.")
+
 # Run your test scenarios by writing them here. Make sure to keep track of them.
 
 def run_test_scenarios():
