@@ -631,19 +631,19 @@ def fulfill_order():
 
 class OrchestrationAgent(ToolCallingAgent):
     def __init__(self, model, tools):
-        super().__init__(model, tools, name="orchestrator", description="Orchestrates the execution of other agents to fulfill orders.")
+        super().__init__(model=model, tools=tools, name="orchestrator", description="Orchestrates the execution of other agents to fulfill orders.")
 
 class InventoryAgent(ToolCallingAgent):
     def __init__(self, model, tools):
-        super().__init__(model, tools, name="inventory", description="Manages the inventory of products.")
+        super().__init__(model=model, tools=tools, name="inventory", description="Manages the inventory of products.")
 
 class QuoteAgent(ToolCallingAgent):
     def __init__(self, model, tools):
-        super().__init__(model, tools, name="quote", description="Generates quotes for products based on inventory availability.")
+        super().__init__(model=model, tools=tools, name="quote", description="Generates quotes for products based on inventory availability.")
 
 class SalesFinalisationAgent(ToolCallingAgent):
     def __init__(self, model, tools):
-        super().__init__(model, tools, name="sales_finalisation", description="Finalises sales orders by updating inventory and generating invoices.")
+        super().__init__(model=model, tools=tools, name="sales_finalisation", description="Finalises sales orders by updating inventory and generating invoices.")
 
 # Run your test scenarios by writing them here. Make sure to keep track of them.
 
