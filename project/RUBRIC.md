@@ -14,3 +14,4 @@ This file contains the project Rubric, which is the definition of completeness.
 * (XXX define this based on file contents) The customer never sees exact profit margins, error messages, PII other than their own, or any other sensitive internal company information.
 * All variable names and function names are snake_case and accurately describe what they are.
 * There are comments and docstrings at appropriate places.
+* There are no TODOs remaining in the code.
