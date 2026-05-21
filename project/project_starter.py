@@ -417,6 +417,44 @@ def get_all_inventory(as_of_date: str) -> Dict[str, int]:
     return dict(zip(result["item_name"], result["stock"]))
 
 
+def get_quote(item_names: List[str]) -> Dict[str, float]:
+    """
+    Retrieve unit prices for the specified items from the inventory table.
+
+    Args:
+        item_names (List[str]): List of item names to look up prices for.
+
+    Returns:
+        Dict[str, float]: A dictionary mapping item names to their unit prices.
+                          Items not found are omitted from the result.
+    """
+    if not item_names:
+        return {}
+
+    # Build parameterized query for multiple items
+    placeholders = ",".join([f":item_{i}" for i in range(len(item_names))])
+    params = {f"item_{i}": name for i, name in enumerate(item_names)}
+
+    query = f"""
+        SELECT item_name, unit_price
+        FROM inventory
+        WHERE item_name IN ({placeholders})
+    """
+
+    result = pd.read_sql(query, db_engine, params=params)
+    found_items = {row["item_name"]: row["unit_price"] for _, row in result.iterrows()}
+
+    # Build result with validity info for all requested items
+    result_dict = {}
+    for item_name in item_names:
+        if item_name in found_items:
+            result_dict[item_name] = {"price": found_items[item_name], "is_valid": True}
+        else:
+            result_dict[item_name] = {"price": None, "is_valid": False}
+
+    return result_dict
+
+
 def get_stock_level(item_name: str, as_of_date: Union[str, datetime]) -> pd.DataFrame:
     """
     Retrieve the stock level of a specific item as of a given date.
@@ -468,7 +506,7 @@ def get_supplier_delivery_date(input_date_str: str, quantity: int) -> str:
         - >1000 units: 7 days
 
     Args:
-        input_date_str (str): The starting date in ISO format (YYYY-MM-DD).
+        input_date_str (str): The  in ISO format (YYYY-MM-DD).
         quantity (int): The number of units in the order.
 
     Returns:
@@ -740,12 +778,56 @@ def check_inventory(as_of_date: str) -> str:
     return f"Inventory as of '{as_of_date}':\n{items_str}"
 
 
-# TODO: get a quote?
+@tool
+def check_stock_level(item_name: str, as_of_date: str) -> str:
+    """Retrieve the stock level for a single inventory item on the given date.
+
+    Args:
+        item_name: The name of the item to look up.
+        as_of_date: The date to check stock for, in ISO format (YYYY-MM-DD).
+
+    Returns:
+        A human-readable summary of the item's stock level as of the given date.
+
+    """
+    if not is_valid_iso8601_date(as_of_date):
+        return f"Invalid date format: '{as_of_date}'. Use YYYY-MM-DD."
+    result = get_stock_level(item_name, as_of_date)
+    if result.empty or result.iloc[0]["current_stock"] == 0:
+        return f"No stock found for '{item_name}' as of '{as_of_date}'."
+    qty = int(result.iloc[0]["current_stock"])
+    return f"Stock level for '{item_name}' as of '{as_of_date}': {qty} units."
 
 
 # Tools for quoting agent
+
+
 @tool
-def get_quote_history(search_terms: List[str]) -> List[Dict]:
+def get_item_prices(item_names: List[str]) -> str:
+    """Retrieve unit prices for the specified items from the inventory.
+
+    Args:
+        item_names: A list of item names to look up prices for.
+
+    Returns:
+        A human-readable summary of item names and their unit prices.
+
+    """
+    if not item_names:
+        return "No item names provided."
+    prices = get_quote(item_names)
+    lines = [f"Information for {len(prices)} item(s):"]
+    for name in sorted(prices.keys()):
+        item_info = prices[name]
+        if item_info["is_valid"]:
+            lines.append(f"  - {name}: ${item_info['price']:.2f}")
+        else:
+            lines.append(f"  - {name}: Not a valid item in our inventory.")
+    return "\n".join(lines)
+
+
+@tool
+def get_quote_history(search_terms: List[str]) -> str:
     """Retrieve a list of historical quotes that match any of the provided search terms.
 
     The function searches both the original customer request (from `quote_requests`) and
@@ -757,7 +839,7 @@ def get_quote_history(search_terms: List[str]) -> List[Dict]:
         limit (int, optional): Maximum number of quote records to return. Default is 5.
 
     Returns:
-        List[Dict]: A list of matching quotes, each represented as a dictionary with fields:
+        A list of matching quotes, each represented as a dictionary with fields:
             - original_request
             - total_amount
             - quote_explanation
@@ -766,13 +848,34 @@ def get_quote_history(search_terms: List[str]) -> List[Dict]:
             - event_type
             - order_date
     """
-    return search_quote_history(search_terms)
+    results = search_quote_history(search_terms)
+    if not results:
+        return f"No historical quotes found matching: {', '.join(search_terms)}."
+    lines = [
+        f"Found {len(results)} historical quote(s) matching '{', '.join(search_terms)}':"
+    ]
+    for i, q in enumerate(results, 1):
+        amount = (
+            f"${q['total_amount']:.2f}" if q["total_amount"] >= 0 else "unavailable"
+        )
+        lines.append(
+            f"\n[Quote {i}]"
+            f"\n  Date: {q['order_date']}"
+            f"\n  Job type: {q['job_type']}, Order size: {q['order_size']}, Event: {q['event_type']}"
+            f"\n  Total amount: {amount}"
+            f"\n  Original request: {q['original_request']}"
+            f"\n  Explanation: {q['quote_explanation']}"
+        )
+    result = "\n".join(lines)
+    print(result)
+    return result
 
 
 # Tools for ordering agent
 @tool
 def get_delivery_timeline(order_date: str, quantity: int) -> str:
     """Estimate the supplier delivery date based on the requested order quantity and a starting date.
+    Inventory requires preparation before it can be delivered to the customer.
 
     Delivery lead time increases with order size:
         - ≤10 units: same day
@@ -787,7 +890,11 @@ def get_delivery_timeline(order_date: str, quantity: int) -> str:
     Returns:
         str: Estimated delivery date in ISO format (YYYY-MM-DD).
     """
-    return get_supplier_delivery_date(order_date, quantity)
+    delivery_date = get_supplier_delivery_date(order_date, quantity)
+    return (
+        f"For an order of {quantity} unit(s) placed on {order_date}, "
+        f"the estimated delivery date is {delivery_date}."
+    )
 
 
 @tool
@@ -834,6 +941,8 @@ You can finalise sales.
 When a customer requests paper, they mean that they would like a sale finalised.
 When checking inventory for multiple items, check all items in a single request to the inventory team member.
 Always include the request date when delegating tasks to team members.
+Inventory requires preparation time before it can be delivered; ask the "quote" team member to calculate these so these
+can be provided to the customer. Provide the request date.
 
 Process the following customer request:
 <customer_request>
@@ -884,9 +993,11 @@ def create_agent() -> ToolCallingAgent:
         api_base=API_BASE,
     )
 
-    inventory_agent = InventoryAgent(model=model, tools=[check_inventory])
+    inventory_agent = InventoryAgent(
+        model=model, tools=[check_inventory, check_stock_level]
+    )
     quote_agent = QuoteAgent(
-        model=model, tools=[check_inventory, get_quote_history, get_delivery_timeline]
+        model=model, tools=[get_quote_history, get_item_prices, get_delivery_timeline]
     )
     sales_finalisation_agent = SalesFinalisationAgent(
         model=model, tools=[fulfill_order]
@@ -897,6 +1008,72 @@ def create_agent() -> ToolCallingAgent:
         managed_agents=[inventory_agent, quote_agent, sales_finalisation_agent],
     )
     return orchestrator
+
+
+def run_one():
+
+    print("Initializing Database...")
+    init_database(db_engine)
+    try:
+        quote_requests_sample = pd.read_csv("quote_requests_sample.csv")
+        quote_requests_sample["request_date"] = pd.to_datetime(
+            quote_requests_sample["request_date"], format="%m/%d/%y", errors="coerce"
+        )
+        quote_requests_sample.dropna(subset=["request_date"], inplace=True)
+        quote_requests_sample = quote_requests_sample.sort_values("request_date")
+    except Exception as e:
+        print(f"FATAL: Error loading test data: {e}")
+        return
+
+    # Get initial state
+    initial_date = quote_requests_sample["request_date"].min().strftime("%Y-%m-%d")
+    report = generate_financial_report(initial_date)
+    current_cash = report["cash_balance"]
+    current_inventory = report["inventory_value"]
+
+    agent: ToolCallingAgent = create_agent()
+
+    job = "office manager"
+    need_size = "small"
+    event = "ceremony"
+    request = """"I would like to request the following paper supplies for the ceremony:
+
+- 200 sheets of A4 glossy paper
+- 100 sheets of heavy cardstock (white)
+- 100 sheets of colored paper (assorted colors)
+
+I need these supplies delivered by April 15, 2025. Thank you."""
+    request_date = "2025-04-01"
+
+    print(f"Context: {job} organizing {event}")
+    print(f"Request Date: {request_date}")
+    print(f"Cash Balance: ${current_cash:.2f}")
+    print(f"Inventory Value: ${current_inventory:.2f}")
+
+    request_with_date = f"""
+    Date of request (YYYY-MM-DD): {request_date}
+    Customer role: {job}
+    Job size: {need_size}
+    Event type: {event}
+    --
+    {request}"""
+    response = agent.run(request_with_date)
+
+    # Update state
+    report = generate_financial_report(request_date)
+    current_cash = report["cash_balance"]
+    current_inventory = report["inventory_value"]
+
+    print(f"Response: {response}")
+    print(f"Updated Cash: ${current_cash:.2f}")
+    print(f"Updated Inventory: ${current_inventory:.2f}")
+
+    # Final report
+    final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")
+    final_report = generate_financial_report(final_date)
+    print("\n===== FINAL FINANCIAL REPORT =====")
+    print(f"Final Cash: ${final_report['cash_balance']:.2f}")
+    print(f"Final Inventory: ${final_report['inventory_value']:.2f}")
 
 
 def run_test_scenarios():
@@ -954,8 +1131,6 @@ def run_test_scenarios():
             }
         )
 
-        # TODO - for debugging only
-        break
         time.sleep(1)
 
     # Final report
@@ -971,4 +1146,5 @@ def run_test_scenarios():
 
 
 if __name__ == "__main__":
-    results = run_test_scenarios()
+    run_one()
+    # results = run_test_scenarios()
