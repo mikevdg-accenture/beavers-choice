@@ -710,18 +710,23 @@ else:
 
 # Tools for inventory agent
 @tool
-def check_inventory(dates: str) -> Dict[str, int]:
+def check_inventory(dates: str) -> str:
     """Retrieve the full inventory contents for the given date.
 
     Args:
-        dates: The date or date range to check inventory for.
+        dates: The date to check inventory for, in ISO format (YYYY-MM-DD).
 
     Returns:
-        A dictionary mapping item names to their quantities in inventory.
+        A human-readable summary of all item quantities in inventory as of the given date.
 
     """
     inventory: Dict[str, int] = get_all_inventory(dates)
-    return inventory
+    if not inventory:
+        return f"No inventory data found as of '{dates}'."
+    items_str = "\n".join(
+        f"  - {name}: {int(qty)} units" for name, qty in sorted(inventory.items())
+    )
+    return f"Inventory as of '{dates}':\n{items_str}"
 
 
 # TODO: get a quote?
@@ -777,7 +782,7 @@ def get_delivery_timeline(order_date: str, quantity: int) -> str:
 @tool
 def fulfill_order(
     item_name: str, quantity: int, price: float, transaction_date: str
-) -> int:
+) -> str:
     """Creates and finalises a single sale for that customer.
 
     Args:
@@ -787,9 +792,12 @@ def fulfill_order(
         transaction_date: The date of the transaction in ISO format (YYYY-MM-DD).
 
     Returns:
-        The transaction ID of the fulfilled order.
+        A confirmation message including the transaction ID of the fulfilled order.
     """
-    return create_transaction(item_name, "sales", quantity, price, transaction_date)
+    transaction_id = create_transaction(
+        item_name, "sales", quantity, price, transaction_date
+    )
+    return f"Order successfully fulfilled for {quantity} unit(s) of '{item_name}' at ${price:.2f} total on {transaction_date}. Transaction ID: {transaction_id}."
 
 
 class OrchestrationAgent(ToolCallingAgent):
@@ -810,6 +818,7 @@ You can generate quotes for customers.
 You can generate quotes for products based on inventory availability.
 You can finalise sales.
 When a customer requests paper, they mean that they would like a sale finalised.
+When checking inventory for multiple items, check all items in a single request to the inventory team member.
 
 Process the following customer request:
 <customer_request>
