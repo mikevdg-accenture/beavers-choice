@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from smolagents import OpenAIServerModel, ToolCallingAgent, tool
-from smolagents.memory import ActionStep
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.sql import text
 
@@ -695,11 +694,14 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("UDACITY_OPENAI_API_KEY")
+if None == OPENAI_API_KEY:
+    raise ValueError("No OpenAI API key found.")
 
+assert OPENAI_API_KEY is not None
 if OPENAI_API_KEY.startswith("voc"):
     API_BASE = "https://openai.vocareum.com/v1"
 else:
-    raise Error("We do not support OpenAI keys here sorry.")
+    raise ValueError("We do not support OpenAI keys here sorry.")
 
 
 """Set up tools for your agents to use, these should be methods that combine the database functions above
@@ -709,22 +711,44 @@ else:
 # Tools for inventory agent
 @tool
 def check_inventory(dates: str) -> Dict[str, int]:
-    """Check inventory for different paper types.
+    """Retrieve the full inventory contents for the given date.
 
     Args:
         dates: The date or date range to check inventory for.
+
+    Returns:
+        A dictionary mapping item names to their quantities in inventory.
+
     """
     inventory: Dict[str, int] = get_all_inventory(dates)
     return inventory
 
 
+# TODO: get a quote?
+
+
 # Tools for quoting agent
 @tool
 def get_quote_history(search_terms: List[str]) -> List[Dict]:
-    """Get the quote history related to a customer's request.
+    """Retrieve a list of historical quotes that match any of the provided search terms.
+
+    The function searches both the original customer request (from `quote_requests`) and
+    the explanation for the quote (from `quotes`) for each keyword. Results are sorted by
+    most recent order date and limited by the `limit` parameter.
 
     Args:
-        search_terms: List of keywords to search for in quote history.
+        search_terms (List[str]): List of terms to match against customer requests and explanations.
+        limit (int, optional): Maximum number of quote records to return. Default is 5.
+
+    Returns:
+        List[Dict]: A list of matching quotes, each represented as a dictionary with fields:
+            - original_request
+            - total_amount
+            - quote_explanation
+            - job_type
+            - order_size
+            - event_type
+            - order_date
     """
     return search_quote_history(search_terms)
 
@@ -732,11 +756,20 @@ def get_quote_history(search_terms: List[str]) -> List[Dict]:
 # Tools for ordering agent
 @tool
 def get_delivery_timeline(order_date: str, quantity: int) -> str:
-    """Check the timeline for delivery of an item from the supplier.
+    """Estimate the supplier delivery date based on the requested order quantity and a starting date.
+
+    Delivery lead time increases with order size:
+        - ≤10 units: same day
+        - 11–100 units: 1 day
+        - 101–1000 units: 4 days
+        - >1000 units: 7 days
 
     Args:
-        order_date: The date the order is placed in ISO format (YYYY-MM-DD).
-        quantity: The number of units being ordered.
+        input_date_str (str): The starting date in ISO format (YYYY-MM-DD).
+        quantity (int): The number of units in the order.
+
+    Returns:
+        str: Estimated delivery date in ISO format (YYYY-MM-DD).
     """
     return get_supplier_delivery_date(order_date, quantity)
 
@@ -745,24 +778,34 @@ def get_delivery_timeline(order_date: str, quantity: int) -> str:
 def fulfill_order(
     item_name: str, quantity: int, price: float, transaction_date: str
 ) -> int:
-    """Fulfill order by updating the system database.
+    """Creates and finalises a single sale for that customer.
 
     Args:
         item_name: The name of the item being ordered.
         quantity: The number of units in the order.
         price: The total price of the order.
         transaction_date: The date of the transaction in ISO format (YYYY-MM-DD).
+
+    Returns:
+        The transaction ID of the fulfilled order.
     """
     return create_transaction(item_name, "sales", quantity, price, transaction_date)
 
 
 class OrchestrationAgent(ToolCallingAgent):
-    def __init__(self, model, tools):
+    def __init__(self, model, managed_agents):
         super().__init__(
             model=model,
-            tools=tools,
+            tools=[],
             name="orchestrator",
-            description="Orchestrates the execution of other agents to fulfill orders.",
+            description="""You are a customer service agent for the "Beaver's Choice" paper company.
+            You are the orchestration agent for other agents.
+            You can generate quotes for customers.
+            You can generate quotes for products based on inventory availability.
+            You can finalise sales.
+            When a customer requests paper, they mean that they would like a sale finalised.
+            """,
+            managed_agents=managed_agents,
         )
 
 
@@ -772,7 +815,7 @@ class InventoryAgent(ToolCallingAgent):
             model=model,
             tools=tools,
             name="inventory",
-            description="Manages the inventory of products.",
+            description="You are responsible for answer queries about inventory availability.",
         )
 
 
@@ -799,9 +842,27 @@ class SalesFinalisationAgent(ToolCallingAgent):
 # Run your test scenarios by writing them here. Make sure to keep track of them.
 
 
-def stop_on_not_implemented(step: ActionStep, agent):
-    if isinstance(step.error, NotImplementedError):
-        raise step.error  # propagates out of agent.run()
+def create_agent() -> ToolCallingAgent:
+    # Initialize agents
+    model = OpenAIServerModel(
+        model_id="gpt-4o-mini",
+        api_key=OPENAI_API_KEY,
+        api_base=API_BASE,
+    )
+
+    inventory_agent = InventoryAgent(model=model, tools=[check_inventory])
+    quote_agent = QuoteAgent(
+        model=model, tools=[check_inventory, get_quote_history, get_delivery_timeline]
+    )
+    sales_finalisation_agent = SalesFinalisationAgent(
+        model=model, tools=[fulfill_order]
+    )
+
+    orchestrator: ToolCallingAgent = OrchestrationAgent(
+        model=model,
+        managed_agents=[inventory_agent, quote_agent, sales_finalisation_agent],
+    )
+    return orchestrator
 
 
 def run_test_scenarios():
@@ -825,22 +886,7 @@ def run_test_scenarios():
     current_cash = report["cash_balance"]
     current_inventory = report["inventory_value"]
 
-    # Initialize agents
-    model = OpenAIServerModel(
-        model_id="gpt-4o-mini",
-        api_key=OPENAI_API_KEY,
-        api_base=API_BASE,
-    )
-
-    agent: ToolCallingAgent = OrchestrationAgent(
-        model=model,
-        tools=[
-            check_inventory,
-            get_quote_history,
-            get_delivery_timeline,
-            fulfill_order,
-        ],
-    )
+    agent: ToolCallingAgent = create_agent()
 
     results = []
     for idx, row in quote_requests_sample.iterrows():

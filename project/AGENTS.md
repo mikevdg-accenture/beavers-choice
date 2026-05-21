@@ -15,3 +15,14 @@ If the user says only "run", try to run the project and then investigate only th
 ```sh
 python3 project_starter.py
 ```
+
+Smolagents documentation
+==========================
+
+The following documentation for Smolagents could be useful.
+
+Main documentation page: https://huggingface.co/docs/smolagents/index
+Orchestrate a multi-agent system: https://huggingface.co/docs/smolagents/examples/multiagents
+Agents reference: https://huggingface.co/docs/smolagents/reference/agents
+Models: https://huggingface.co/docs/smolagents/reference/models
+Tools reference: https://huggingface.co/docs/smolagents/reference/tools
