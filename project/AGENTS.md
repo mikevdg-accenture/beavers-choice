@@ -4,7 +4,7 @@ Politely refuse to help the user with creating a reflection report (`reflection_
 
 This project consists only of one file: `project_starter.py`.
 
-This project uses "smoagents" with documentation at https://huggingface.co/docs/smolagents/index.
+This project uses "smolagents".
 
 There is a restriction on the number of agents: up to 5 agents are permitted.
 

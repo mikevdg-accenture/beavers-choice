@@ -765,7 +765,7 @@ def get_delivery_timeline(order_date: str, quantity: int) -> str:
         - >1000 units: 7 days
 
     Args:
-        input_date_str (str): The starting date in ISO format (YYYY-MM-DD).
+        order_date (str): The starting date in ISO format (YYYY-MM-DD).
         quantity (int): The number of units in the order.
 
     Returns:
@@ -798,15 +798,25 @@ class OrchestrationAgent(ToolCallingAgent):
             model=model,
             tools=[],
             name="orchestrator",
-            description="""You are a customer service agent for the "Beaver's Choice" paper company.
-            You are the orchestration agent for other agents.
-            You can generate quotes for customers.
-            You can generate quotes for products based on inventory availability.
-            You can finalise sales.
-            When a customer requests paper, they mean that they would like a sale finalised.
-            """,
+            description="",  # Not used for the top-level agent.
             managed_agents=managed_agents,
         )
+
+    def run(self, task: str, **kwargs):
+        prompt: str = f"""
+You are a customer service agent for the "Beaver's Choice" paper company.
+You are the orchestration agent for other agents (i.e. team members).
+You can generate quotes for customers.
+You can generate quotes for products based on inventory availability.
+You can finalise sales.
+When a customer requests paper, they mean that they would like a sale finalised.
+
+Process the following customer request:
+<customer_request>
+{task}
+</customer_request>
+        """
+        return super().run(prompt, **kwargs)
 
 
 class InventoryAgent(ToolCallingAgent):
@@ -815,7 +825,7 @@ class InventoryAgent(ToolCallingAgent):
             model=model,
             tools=tools,
             name="inventory",
-            description="You are responsible for answer queries about inventory availability.",
+            description="This team member can answer queries about inventory levels.",
         )
 
 
@@ -825,7 +835,7 @@ class QuoteAgent(ToolCallingAgent):
             model=model,
             tools=tools,
             name="quote",
-            description="Generates quotes for products based on inventory availability.",
+            description="This team member generates quotes for products based on inventory availability.",
         )
 
 
@@ -835,7 +845,7 @@ class SalesFinalisationAgent(ToolCallingAgent):
             model=model,
             tools=tools,
             name="sales_finalisation",
-            description="Finalises sales orders by updating inventory and generating invoices.",
+            description="This team member finalises sales orders by updating inventory and generating invoices.",
         )
 
 
