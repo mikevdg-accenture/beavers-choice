@@ -708,25 +708,36 @@ else:
  and apply criteria to them to ensure that the flow of the system is correct."""
 
 
+def is_valid_iso8601_date(date_string):
+    """Check if a string is a valid ISO 8601 date in YYYY-MM-DD format."""
+    try:
+        datetime.strptime(date_string, "%Y-%m-%d")
+        return True
+    except ValueError:
+        return False
+
+
 # Tools for inventory agent
 @tool
-def check_inventory(dates: str) -> str:
+def check_inventory(as_of_date: str) -> str:
     """Retrieve the full inventory contents for the given date.
 
     Args:
-        dates: The date to check inventory for, in ISO format (YYYY-MM-DD).
+        as_of_date: The date to check inventory for, in ISO format (YYYY-MM-DD).
 
     Returns:
         A human-readable summary of all item quantities in inventory as of the given date.
 
     """
-    inventory: Dict[str, int] = get_all_inventory(dates)
+    inventory: Dict[str, int] = get_all_inventory(as_of_date)
+    if not is_valid_iso8601_date(as_of_date):
+        return f"Invalid date format: '{as_of_date}'. Use YYYY-MM-DD."
     if not inventory:
-        return f"No inventory data found as of '{dates}'."
+        return f"No inventory data found as of '{as_of_date}'."
     items_str = "\n".join(
         f"  - {name}: {int(qty)} units" for name, qty in sorted(inventory.items())
     )
-    return f"Inventory as of '{dates}':\n{items_str}"
+    return f"Inventory as of '{as_of_date}':\n{items_str}"
 
 
 # TODO: get a quote?
@@ -794,10 +805,13 @@ def fulfill_order(
     Returns:
         A confirmation message including the transaction ID of the fulfilled order.
     """
-    transaction_id = create_transaction(
-        item_name, "sales", quantity, price, transaction_date
-    )
-    return f"Order successfully fulfilled for {quantity} unit(s) of '{item_name}' at ${price:.2f} total on {transaction_date}. Transaction ID: {transaction_id}."
+    try:
+        transaction_id = create_transaction(
+            item_name, "sales", quantity, price, transaction_date
+        )
+        return f"Order successfully fulfilled for {quantity} unit(s) of '{item_name}' at ${price:.2f} total on {transaction_date}. Transaction ID: {transaction_id}."
+    except Exception as e:
+        return f"Failed to fulfill order: {str(e)}"
 
 
 class OrchestrationAgent(ToolCallingAgent):
@@ -819,6 +833,7 @@ You can generate quotes for products based on inventory availability.
 You can finalise sales.
 When a customer requests paper, they mean that they would like a sale finalised.
 When checking inventory for multiple items, check all items in a single request to the inventory team member.
+Always include the request date when delegating tasks to team members.
 
 Process the following customer request:
 <customer_request>
