@@ -1055,18 +1055,18 @@ def run_one():
     print("Initializing Database...")
     init_database(db_engine)
     try:
-        quote_requests_sample = pd.read_csv("quote_requests_sample.csv")
-        quote_requests_sample["request_date"] = pd.to_datetime(
-            quote_requests_sample["request_date"], format="%m/%d/%y", errors="coerce"
+        quote_requests = pd.read_csv("quote_requests.csv")
+        quote_requests["request_date"] = pd.to_datetime(
+            quote_requests["request_date"], format="%m/%d/%y", errors="coerce"
         )
-        quote_requests_sample.dropna(subset=["request_date"], inplace=True)
-        quote_requests_sample = quote_requests_sample.sort_values("request_date")
+        quote_requests.dropna(subset=["request_date"], inplace=True)
+        quote_requests = quote_requests.sort_values("request_date")
     except Exception as e:
         print(f"FATAL: Error loading test data: {e}")
         return
 
     # Get initial state
-    initial_date = quote_requests_sample["request_date"].min().strftime("%Y-%m-%d")
+    initial_date = quote_requests["request_date"].min().strftime("%Y-%m-%d")
     report = generate_financial_report(initial_date)
     current_cash = report["cash_balance"]
     current_inventory = report["inventory_value"]
@@ -1109,7 +1109,7 @@ I need these supplies delivered by April 15, 2025. Thank you."""
     print(f"Updated Inventory: ${current_inventory:.2f}")
 
     # Final report
-    final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")
+    final_date = quote_requests["request_date"].max().strftime("%Y-%m-%d")
     final_report = generate_financial_report(final_date)
     print("\n===== FINAL FINANCIAL REPORT =====")
     print(f"Final Cash: ${final_report['cash_balance']:.2f}")
@@ -1121,18 +1121,18 @@ def run_test_scenarios():
     print("Initializing Database...")
     init_database(db_engine)
     try:
-        quote_requests_sample = pd.read_csv("quote_requests_sample.csv")
-        quote_requests_sample["request_date"] = pd.to_datetime(
-            quote_requests_sample["request_date"], format="%m/%d/%y", errors="coerce"
+        quote_requests = pd.read_csv("quote_requests.csv")
+        quote_requests["request_date"] = pd.to_datetime(
+            quote_requests["request_date"], format="%m/%d/%y", errors="coerce"
         )
-        quote_requests_sample.dropna(subset=["request_date"], inplace=True)
-        quote_requests_sample = quote_requests_sample.sort_values("request_date")
+        quote_requests.dropna(subset=["request_date"], inplace=True)
+        quote_requests = quote_requests.sort_values("request_date")
     except Exception as e:
         print(f"FATAL: Error loading test data: {e}")
         return
 
     # Get initial state
-    initial_date = quote_requests_sample["request_date"].min().strftime("%Y-%m-%d")
+    initial_date = quote_requests["request_date"].min().strftime("%Y-%m-%d")
     report = generate_financial_report(initial_date)
     current_cash = report["cash_balance"]
     current_inventory = report["inventory_value"]
@@ -1140,10 +1140,10 @@ def run_test_scenarios():
     agent: ToolCallingAgent = create_agent()
 
     results = []
-    for idx, row in quote_requests_sample.iterrows():
+    for i, (idx, row) in enumerate(quote_requests.iterrows()):
         request_date = row["request_date"].strftime("%Y-%m-%d")
 
-        print(f"\n=== Request {idx + 1} ===")
+        print(f"\n=== Request {i + 1} ===")
         print(f"Context: {row['job']} organizing {row['event']}")
         print(f"Request Date: {request_date}")
         print(f"Cash Balance: ${current_cash:.2f}")
@@ -1160,7 +1160,11 @@ Job size: {need_size}
 Event type: {event}
 --
 {request}"""
-        response = agent.run(request_with_date)
+        try:
+            response = agent.run(request_with_date)
+        except Exception as e:
+            print(f"ERROR processing request {i + 1}: {e}")
+            response = f"Error: {str(e)}"
 
         # Update state
         report = generate_financial_report(request_date)
@@ -1173,7 +1177,7 @@ Event type: {event}
 
         results.append(
             {
-                "request_id": idx + 1,
+                "request_id": i + 1,
                 "request_date": request_date,
                 "cash_balance": current_cash,
                 "inventory_value": current_inventory,
@@ -1184,7 +1188,7 @@ Event type: {event}
         time.sleep(1)
 
     # Final report
-    final_date = quote_requests_sample["request_date"].max().strftime("%Y-%m-%d")
+    final_date = quote_requests["request_date"].max().strftime("%Y-%m-%d")
     final_report = generate_financial_report(final_date)
     print("\n===== FINAL FINANCIAL REPORT =====")
     print(f"Final Cash: ${final_report['cash_balance']:.2f}")

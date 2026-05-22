@@ -21,9 +21,9 @@ This project challenges your ability to orchestrate agents using modern Python f
 From the `project.zip` starter archive, you will find:
 
 - `project_starter.py`: The main Python script you will modify to implement your agent system
-- `quotes.csv`: Historical quote data used for reference by quoting agents
-- `quote_requests.csv`: Incoming customer requests used to build quoting logic
 - `quote_requests_sample.csv`: A set of simulated test cases to evaluate your system
+- `quotes.csv`: Historical quote data used for reference by quoting agents. This is generated from quote_requests.csv.
+- `quote_requests.csv`: Incoming customer requests used to build quoting logic
 
 ---
 
