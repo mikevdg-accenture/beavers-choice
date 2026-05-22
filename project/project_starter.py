@@ -1,8 +1,9 @@
 import ast
 import os
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -379,7 +380,7 @@ def create_transaction(
         raise
 
 
-def get_all_inventory(as_of_date: str) -> Dict[str, int]:
+def get_all_inventory(request_date: str) -> Dict[str, int]:
     """
     Retrieve a snapshot of available inventory as of a specific date.
 
@@ -389,7 +390,7 @@ def get_all_inventory(as_of_date: str) -> Dict[str, int]:
     Only items with positive stock are included in the result.
 
     Args:
-        as_of_date (str): ISO-formatted date string (YYYY-MM-DD) representing the inventory cutoff.
+        request_date (str): ISO-formatted date string (YYYY-MM-DD) representing the inventory cutoff.
 
     Returns:
         Dict[str, int]: A dictionary mapping item names to their current stock levels.
@@ -405,19 +406,27 @@ def get_all_inventory(as_of_date: str) -> Dict[str, int]:
             END) as stock
         FROM transactions
         WHERE item_name IS NOT NULL
-        AND transaction_date <= :as_of_date
+        AND transaction_date <= :request_date
         GROUP BY item_name
         HAVING stock > 0
     """
 
     # Execute the query with the date parameter
-    result = pd.read_sql(query, db_engine, params={"as_of_date": as_of_date})
+    result = pd.read_sql(query, db_engine, params={"request_date": request_date})
 
     # Convert the result into a dictionary {item_name: stock}
     return dict(zip(result["item_name"], result["stock"]))
 
 
-def get_quote(item_names: List[str]) -> Dict[str, float]:
+@dataclass
+class ItemInfo:
+    """Information about an item including its price and validity."""
+
+    price: float | None
+    is_valid: bool
+
+
+def get_quote(item_names: List[str]) -> Dict[str, ItemInfo]:
     """
     Retrieve unit prices for the specified items from the inventory table.
 
@@ -425,8 +434,9 @@ def get_quote(item_names: List[str]) -> Dict[str, float]:
         item_names (List[str]): List of item names to look up prices for.
 
     Returns:
-        Dict[str, float]: A dictionary mapping item names to their unit prices.
-                          Items not found are omitted from the result.
+        Dict[str, ItemInfo]: A dictionary mapping item names to ItemInfo objects
+                             containing their unit prices. `is_valid` is set to false
+                             if the item does not exist in our database.
     """
     if not item_names:
         return {}
@@ -442,20 +452,24 @@ def get_quote(item_names: List[str]) -> Dict[str, float]:
     """
 
     result = pd.read_sql(query, db_engine, params=params)
-    found_items = {row["item_name"]: row["unit_price"] for _, row in result.iterrows()}
+    found_items = {
+        row["item_name"]: float(row["unit_price"]) for _, row in result.iterrows()
+    }
 
     # Build result with validity info for all requested items
     result_dict = {}
     for item_name in item_names:
         if item_name in found_items:
-            result_dict[item_name] = {"price": found_items[item_name], "is_valid": True}
+            result_dict[item_name] = ItemInfo(
+                price=found_items[item_name], is_valid=True
+            )
         else:
-            result_dict[item_name] = {"price": None, "is_valid": False}
+            result_dict[item_name] = ItemInfo(price=None, is_valid=False)
 
     return result_dict
 
 
-def get_stock_level(item_name: str, as_of_date: Union[str, datetime]) -> pd.DataFrame:
+def get_stock_level(item_name: str, request_date: Union[str, datetime]) -> pd.DataFrame:
     """
     Retrieve the stock level of a specific item as of a given date.
 
@@ -464,14 +478,14 @@ def get_stock_level(item_name: str, as_of_date: Union[str, datetime]) -> pd.Data
 
     Args:
         item_name (str): The name of the item to look up.
-        as_of_date (str or datetime): The cutoff date (inclusive) for calculating stock.
+        request_date (str or datetime): The cutoff date (inclusive) for calculating stock.
 
     Returns:
         pd.DataFrame: A single-row DataFrame with columns 'item_name' and 'current_stock'.
     """
     # Convert date to ISO string format if it's a datetime object
-    if isinstance(as_of_date, datetime):
-        as_of_date = as_of_date.isoformat()
+    if isinstance(request_date, datetime):
+        request_date = request_date.isoformat()
 
     # SQL query to compute net stock level for the item
     stock_query = """
@@ -484,14 +498,14 @@ def get_stock_level(item_name: str, as_of_date: Union[str, datetime]) -> pd.Data
             END), 0) AS current_stock
         FROM transactions
         WHERE item_name = :item_name
-        AND transaction_date <= :as_of_date
+        AND transaction_date <= :request_date
     """
 
     # Execute query and return result as a DataFrame
     return pd.read_sql(
         stock_query,
         db_engine,
-        params={"item_name": item_name, "as_of_date": as_of_date},
+        params={"item_name": item_name, "request_date": request_date},
     )
 
 
@@ -623,9 +637,9 @@ def generate_financial_report(as_of_date: Union[str, datetime]) -> Dict:
 
     # Compute total inventory value and summary by item
     for _, item in inventory_df.iterrows():
-        stock_info = get_stock_level(item["item_name"], as_of_date)
+        stock_info = get_stock_level(str(item["item_name"]), as_of_date)
         stock = stock_info["current_stock"].iloc[0]
-        item_value = stock * item["unit_price"]
+        item_value = stock * float(item["unit_price"])
         inventory_value += item_value
 
         inventory_summary.append(
@@ -694,7 +708,7 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
         params[param_name] = f"%{term.lower()}%"
 
     # Combine conditions; fallback to always-true if no terms provided
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    where_clause = " OR ".join(conditions) if conditions else "1=1"
 
     # Final SQL query to join quotes with quote_requests
     query = f"""
@@ -732,7 +746,7 @@ def search_quote_history(search_terms: List[str], limit: int = 5) -> List[Dict]:
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("UDACITY_OPENAI_API_KEY")
-if None == OPENAI_API_KEY:
+if OPENAI_API_KEY is None:
     raise ValueError("No OpenAI API key found.")
 
 assert OPENAI_API_KEY is not None
@@ -757,46 +771,46 @@ def is_valid_iso8601_date(date_string):
 
 # Tools for inventory agent
 @tool
-def check_inventory(as_of_date: str) -> str:
+def check_inventory(request_date: str) -> str:
     """Retrieve the full inventory contents for the given date.
 
     Args:
-        as_of_date: The date to check inventory for, in ISO format (YYYY-MM-DD).
+        request_date: The date to check inventory for, in ISO format (YYYY-MM-DD).
 
     Returns:
         A human-readable summary of all item quantities in inventory as of the given date.
 
     """
-    inventory: Dict[str, int] = get_all_inventory(as_of_date)
-    if not is_valid_iso8601_date(as_of_date):
-        return f"Invalid date format: '{as_of_date}'. Use YYYY-MM-DD."
+    inventory: Dict[str, int] = get_all_inventory(request_date)
+    if not is_valid_iso8601_date(request_date):
+        return f"Invalid date format: '{request_date}'. Use YYYY-MM-DD."
     if not inventory:
-        return f"No inventory data found as of '{as_of_date}'."
+        return f"No inventory data found as of '{request_date}'."
     items_str = "\n".join(
         f"  - {name}: {int(qty)} units" for name, qty in sorted(inventory.items())
     )
-    return f"Inventory as of '{as_of_date}':\n{items_str}"
+    return f"Inventory as of '{request_date}':\n{items_str}"
 
 
 @tool
-def check_stock_level(item_name: str, as_of_date: str) -> str:
+def check_stock_level(item_name: str, request_date: str) -> str:
     """Retrieve the stock level for a single inventory item on the given date.
 
     Args:
         item_name: The name of the item to look up.
-        as_of_date: The date to check stock for, in ISO format (YYYY-MM-DD).
+        request_date: The date to check stock for, in ISO format (YYYY-MM-DD).
 
     Returns:
         A human-readable summary of the item's stock level as of the given date.
 
     """
-    if not is_valid_iso8601_date(as_of_date):
-        return f"Invalid date format: '{as_of_date}'. Use YYYY-MM-DD."
-    result = get_stock_level(item_name, as_of_date)
+    if not is_valid_iso8601_date(request_date):
+        return f"Invalid date format: '{request_date}'. Use YYYY-MM-DD."
+    result = get_stock_level(item_name, request_date)
     if result.empty or result.iloc[0]["current_stock"] == 0:
-        return f"No stock found for '{item_name}' as of '{as_of_date}'."
+        return f"No stock found for '{item_name}' as of '{request_date}', or the item does not exist in our system."
     qty = int(result.iloc[0]["current_stock"])
-    return f"Stock level for '{item_name}' as of '{as_of_date}': {qty} units."
+    return f"Stock level for '{item_name}' as of '{request_date}': {qty} units."
 
 
 # Tools for quoting agent
@@ -807,7 +821,8 @@ def get_item_prices(item_names: List[str]) -> str:
     """Retrieve unit prices for the specified items from the inventory.
 
     Args:
-        item_names: A list of item names to look up prices for.
+        item_names: A list of item names to look up prices for. The item names must exactly match
+            their names in our system.
 
     Returns:
         A human-readable summary of item names and their unit prices.
@@ -819,8 +834,8 @@ def get_item_prices(item_names: List[str]) -> str:
     lines = [f"Information for {len(prices)} item(s):"]
     for name in sorted(prices.keys()):
         item_info = prices[name]
-        if item_info["is_valid"]:
-            lines.append(f"  - {name}: ${item_info['price']:.2f}")
+        if item_info.is_valid:
+            lines.append(f"  - {name}: ${item_info.price:.2f}")
         else:
             lines.append(f"  - {name}: Not a valid item in our inventory.")
     return "\n".join(lines)
@@ -860,7 +875,7 @@ def get_quote_history(search_terms: List[str]) -> str:
         )
         lines.append(
             f"\n[Quote {i}]"
-            f"\n  Date: {q['order_date']}"
+            f"\n  order_date: {q['order_date']}"
             f"\n  Job type: {q['job_type']}, Order size: {q['order_size']}, Event: {q['event_type']}"
             f"\n  Total amount: {amount}"
             f"\n  Original request: {q['original_request']}"
@@ -923,42 +938,51 @@ def fulfill_order(
 
 class OrchestrationAgent(ToolCallingAgent):
     def __init__(self, model, managed_agents):
+        instructions = """You are a helpful customer service agent for the "Beaver's Choice" paper company.
+You are the orchestration agent for other agents (i.e. team members).
+The request date MUST always be included when delegating tasks to team members.
+Canonical product names should be used in interaction with team members rather than the customer's product names.
+Before any other interactions with team members, ask the inventory team member to convert the customer's product names
+into canonical product names.
+Unless specified otherwise, assume all inventory items follow U.S. paper size conventions.
+If the product is not available in our inventory, do not finalize a sale but rather repond politely to the customer
+with a list of these alternatives.
+
+You can generate quotes for customers.
+You can finalise sales.
+When a customer requests paper, they mean that they would like a sale finalised.
+When checking inventory for multiple items, check all items in a single request to the inventory team member.
+Inventory requires preparation time before it can be delivered; ask the "quote" team member to calculate these so these
+can be provided to the customer."""
+
         super().__init__(
             model=model,
             tools=[],
             name="orchestrator",
             description="",  # Not used for the top-level agent.
             managed_agents=managed_agents,
+            instructions=instructions,
         )
-
-    def run(self, task: str, **kwargs):
-        prompt: str = f"""
-You are a customer service agent for the "Beaver's Choice" paper company.
-You are the orchestration agent for other agents (i.e. team members).
-You can generate quotes for customers.
-You can generate quotes for products based on inventory availability.
-You can finalise sales.
-When a customer requests paper, they mean that they would like a sale finalised.
-When checking inventory for multiple items, check all items in a single request to the inventory team member.
-Always include the request date when delegating tasks to team members.
-Inventory requires preparation time before it can be delivered; ask the "quote" team member to calculate these so these
-can be provided to the customer. Provide the request date.
-
-Process the following customer request:
-<customer_request>
-{task}
-</customer_request>
-        """
-        return super().run(prompt, **kwargs)
 
 
 class InventoryAgent(ToolCallingAgent):
     def __init__(self, model, tools):
+        instructions = """You are an inventory team member for the "Beaver's Choice" paper company.
+You can answer queries about inventory levels.
+Many customer queries will not include canonical product names. To find canonical product names, search through all inventory
+contents for a similar product. When replying with canonical product names, reply with the customer's name for each product and it's canonical name.
+Unless stated otherwise in a product name, assume all products follow U.S. paper size conventions.
+If a customer's product name is not a product we have, include a comment about this in the reply and report back with suggestions for similar products.
+If no request date is supplied, respond with a complaint about that.
+Product names (item names) are case sensitive.
+"""
         super().__init__(
             model=model,
             tools=tools,
             name="inventory",
-            description="This team member can answer queries about inventory levels.",
+            description="""This team member can answer queries about inventory contents and inventory levels. This team member can attempt to
+            match product names with inventory contents. A request date MUST be supplied with all requests.""",
+            instructions=instructions,
         )
 
 
@@ -968,7 +992,12 @@ class QuoteAgent(ToolCallingAgent):
             model=model,
             tools=tools,
             name="quote",
-            description="This team member generates quotes for products based on inventory availability.",
+            description="This team member generates quotes for products based on inventory availability. It requires exact product names from our inventory.",
+            instructions="""You are a quote managing team member for the "Beaver's Choice" paper company.
+You are responsible for generating quotes for products based on inventory availability.
+If no request date is supplied, respond with a complaint about that.
+Product names (item names) are case sensitive.
+""",
         )
 
 
@@ -979,6 +1008,16 @@ class SalesFinalisationAgent(ToolCallingAgent):
             tools=tools,
             name="sales_finalisation",
             description="This team member finalises sales orders by updating inventory and generating invoices.",
+            instructions="""You are a sales team member for the "Beaver's Choice" paper company.
+You are responsible for finalising sales orders.
+If no request date is supplied, respond with a complaint about that.
+You do sales in two steps:
+    1. You first verify the exact names of products using the check_inventory tool. If
+       the product does not exist in our inventory, do not proceed with the sale but reply
+       with an error saying that the given product could not be found.
+    2. You then finalise the sale using the fulfill_order tool.
+All products in the sale must have their exact name in our inventory.
+Product names (item names) are case sensitive.""",
         )
 
 
@@ -997,10 +1036,11 @@ def create_agent() -> ToolCallingAgent:
         model=model, tools=[check_inventory, check_stock_level]
     )
     quote_agent = QuoteAgent(
-        model=model, tools=[get_quote_history, get_item_prices, get_delivery_timeline]
+        model=model,
+        tools=[get_quote_history, get_item_prices, get_delivery_timeline],
     )
     sales_finalisation_agent = SalesFinalisationAgent(
-        model=model, tools=[fulfill_order]
+        model=model, tools=[check_inventory, fulfill_order]
     )
 
     orchestrator: ToolCallingAgent = OrchestrationAgent(
@@ -1036,7 +1076,7 @@ def run_one():
     job = "office manager"
     need_size = "small"
     event = "ceremony"
-    request = """"I would like to request the following paper supplies for the ceremony:
+    request = """I would like to request the following paper supplies for the ceremony:
 
 - 200 sheets of A4 glossy paper
 - 100 sheets of heavy cardstock (white)
@@ -1051,7 +1091,7 @@ I need these supplies delivered by April 15, 2025. Thank you."""
     print(f"Inventory Value: ${current_inventory:.2f}")
 
     request_with_date = f"""
-    Date of request (YYYY-MM-DD): {request_date}
+    Request Date (YYYY-MM-DD): {request_date}
     Customer role: {job}
     Job size: {need_size}
     Event type: {event}
@@ -1109,7 +1149,17 @@ def run_test_scenarios():
         print(f"Cash Balance: ${current_cash:.2f}")
         print(f"Inventory Value: ${current_inventory:.2f}")
 
-        request_with_date = f"{row['request']} (Date of request: {request_date})"
+        job = row["job"]
+        event = row["event"]
+        need_size = row["need_size"]
+        request = row["request"]
+        request_with_date = f"""
+Date of request (YYYY-MM-DD): {request_date}
+Customer role: {job}
+Job size: {need_size}
+Event type: {event}
+--
+{request}"""
         response = agent.run(request_with_date)
 
         # Update state
