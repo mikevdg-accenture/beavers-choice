@@ -1,0 +1,74 @@
+request_id,request_date,cash_balance,inventory_value,response
+1,2025-04-01,45059.7,4940.299999999999,"The quote for the paper supplies is as follows: 200 sheets of Glossy paper for $40.00 (delivery by April 19, 2025), 100 sheets of Cardstock for $15.00 (delivery by April 16, 2025), and 100 sheets of Colored paper for $10.00 (delivery by April 16, 2025). The total quote is $65.00. However, please note that delivery for the full order will not be complete until April 19, 2025."
+2,2025-04-03,45059.7,4940.299999999999,"Unfortunately, we do not have the requested items: colorful poster paper, streamers, and balloons in stock. However, we do have 'Large poster paper (24x36 inches)' available if you're flexible with the paper type. For streamers and balloons, you may need to find alternative suppliers. Please let me know if you'd like to adjust your order."
+3,2025-04-04,45059.7,4940.299999999999,"Unfortunately, we do not have the required amounts of A4 paper, A3 paper, or printer paper available in our inventory. Specifically, we only have 272 units of A4 paper, no stock of A3 paper, and printer paper is not available. I recommend exploring alternative products or suppliers to fulfill your needs."
+4,2025-04-05,45059.7,4940.299999999999,"Both requested items, high-quality recycled cardstock in various colors and 250 sheets of A4 size printer paper, are not available in inventory as of April 5, 2025. However, we have 272 sheets of A4 size printer paper available. For the cardstock, we recommend considering alternatives such as standard cardstock or checking with other suppliers for high-quality recycled options."
+5,2025-04-05,45059.7,4940.299999999999,"Unfortunately, we do not have stock for 500 sheets of 8.5""x11"" colored paper and 200 rolls of decorative washi tape. However, we do have 595 sheets of cardstock available in various colors. You may want to consider adjusting your request for colored paper or exploring alternative decorative items instead."
+6,2025-04-06,45059.7,4940.299999999999,"We currently cannot fulfill your order for the requested paper items. The following items are not available in our inventory:
+- **White Printer Paper**
+- **Colorful Construction Paper**
+
+However, we do have **595 sheets of Cardstock** available. Unfortunately, we were unable to generate a quote for this item or for any alternatives like 'Colored Paper' as they were also not valid items in the inventory. 
+
+Please let us know if you would like to adjust your order or if you would like to explore other options."
+7,2025-04-07,45059.7,4940.299999999999,"Unfortunately, we currently do not have stock available for the requested items: glossy A4 paper, matte A3 paper, poster boards (24"" x 36""), and heavyweight cardstock. However, we do have: 
+- 272 sheets of standard A4 paper available.
+- 595 sheets of various types of cardstock available.
+
+Would you like to consider these alternatives or have me look for other options?"
+8,2025-04-07,45059.7,4940.299999999999,"Unfortunately, all requested items for your order are currently unavailable. However, we have 272 units of A4 paper, 587 units of glossy paper (not specifically A4), and 788 units of colored paper (not specifically A5). You might consider these alternatives for your upcoming ceremony."
+9,2025-04-07,45059.7,4940.299999999999,"Unfortunately, the requested A4 white printer paper and gloss paper are either not valid items in our inventory or are currently unavailable. However, we do have 272 sheets of A4 white printer paper available at $0.05 per sheet. If you would like, we can proceed with placing an order for the A4 paper and suggest alternatives for the gloss paper needed. Please confirm how you would like to proceed."
+13,2025-04-08,45059.7,4940.299999999999,"Unfortunately, we do not have any A4 printing paper or A4 cardstock available in our inventory at this time. I recommend considering alternative paper sizes or types for your gathering. Please let me know if you would like assistance with that."
+12,2025-04-08,45059.7,4940.299999999999,"We currently do not have stock for the requested items: 200 sheets of colorful cardstock, 500 sheets of standard printer paper, and 100 paper napkins. However, we do have various types of paper, including colored paper and cardstock. Please let us know if you would like to explore these alternatives or modify your order."
+10,2025-04-08,45059.7,4940.299999999999,"The quote for your order of 500 sheets has been generated. The total cost is **$250.00** for 500 sheets of 100 lb cover stock. Please note that the estimated delivery date is **April 19, 2025**, which is later than your requested date of April 15, 2025. Please confirm if this new delivery date is acceptable, and we can proceed with the order."
+11,2025-04-08,45059.7,4940.299999999999,"Unfortunately, we currently cannot fulfill your request for 500 sheets of A3 glossy paper and 300 sheets of A4 matte paper as both types are not available in our inventory. However, we have a total of 587 units of standard glossy paper and 272 units of standard A4 paper available. The estimated delivery date for the A4 paper is April 12, 2025, and its price is $0.05 per sheet. Kindly let us know if you would like to proceed with the available options or need further assistance."
+14,2025-04-09,45059.7,4940.299999999999,"Unfortunately, we cannot fulfill the full order for your request. We have only 272 sheets of A4 paper available from your request for 5,000 sheets. This partial order will cost $13.60 and can be delivered by April 19, 2025. 
+
+As for the poster paper and cardstock, we are currently out of stock. 
+
+For alternatives, I recommend considering large poster paper (24x36 inches) or colored paper, which are well-stocked. We can discuss these options or potentially split your order."
+15,2025-04-12,45059.7,4940.299999999999,"I regret to inform you that we cannot fulfill your order for the requested paper supplies at this time. Here are the details:
+
+- **10,000 sheets of A4 white paper**: Only 272 sheets are available.
+- **5,000 sheets of A3 colored paper**: Currently not in stock.
+- **500 reams of cardboard for signage**: Not available.
+
+However, we do have some related products:
+- 100 lb cover stock: 636 units
+- 80 lb text paper: 249 units
+- Cardstock: 595 units
+- Colored paper (not specifically A3): 788 units
+
+If you are interested in any of the available products or need help sourcing the required items from another supplier, please let me know!"
+16,2025-04-13,45059.7,4940.299999999999,"Unfortunately, we are unable to fulfill your order for the requested items:
+- 500 sheets of A4 printer paper: Only 272 sheets are available at $0.05 per sheet.
+- 200 sheets of colorful construction paper: Not available.
+- 100 sheets of poster board: Not available, but there are 699 sheets of large poster paper (24x36 inches).
+
+The total order size currently is 272 sheets of A4 paper only, with a total of $13.60. 
+
+However, for colorful construction paper and poster board, please consider looking into alternatives or checking with other suppliers, as our inventory can't currently meet your request for assembly by April 15."
+17,2025-04-14,45059.7,4940.299999999999,"Unfortunately, all requested items are out of stock or do not exist in our inventory. Here are some alternatives you might consider for your event:
+
+1. **Printer Paper:** You might want to check if we have other sizes or types of printer paper available.
+2. **Colored Paper:** Perhaps we can offer specialty paper or cardstock as alternatives.
+3. **Table Napkins:** We may have other types of napkins, such as colored or patterned, if those could work for your reception.
+4. **Paper Cups:** Consider if we have regular paper cups or other eco-friendly options in stock.
+5. **Paper Plates:** There might be other plate options available, including compostable or recyclable plates.
+
+Please let me know how you would like to proceed!"
+18,2025-04-14,45059.7,4940.299999999999,"Unfortunately, we currently have no stock available for all requested paper supplies: 500 sheets of high-quality white cardstock, 1000 sheets of standard printing paper, and 200 sheets of colored paper in assorted colors. However, I can suggest exploring alternative products or suppliers that may fulfill your requirements. Please let me know if you would like assistance with that!"
+19,2025-04-15,45059.7,4940.299999999999,"Unfortunately, we do not have stock available for the requested items: 2000 sheets of A4 glossy paper, 1500 sheets of A3 matte paper, and 1000 sheets of assorted color cardstock. However, we do have the following alternatives available:
+
+- General Cardstock: 595 units in stock
+- Colored Paper: 788 units available
+
+Please let me know how you would like to proceed!"
+20,2025-04-17,45059.7,4940.299999999999,"Unfortunately, we currently do not have stock available for the requested items: flyers, posters, and tickets. Additionally, there are no expected restock dates for these items. 
+
+However, we do have available alternatives in our inventory:
+- **Large Poster Paper (24x36 inches)**: 699 units available, which could be suitable for posters.
+- **Cardstock**: 595 units available, which may be used for flyers or tickets.
+- **Colored Paper**: 788 units available, which could also serve as substitutes for flyers or tickets.
+
+If you're open to these alternatives, please let us know how you'd like to proceed. If the specified items are critical for your concert, we recommend checking with alternative suppliers."
