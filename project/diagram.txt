@@ -1,0 +1,50 @@
+Current Multi-Agent Project Design
+==================================
+
+                                   ┌────────────────────┐
+                                   │    Orchestrator    │
+                                   │       Agent        │
+                                   └──────────┬─────────┘
+                                              │
+            ┌─────────────────────────────────┼────────────────────────────────┐
+ ┌──────────┴───────────┐       ┌─────────────┴────────────┐       ┌───────────┴────────┐
+ │  Inventory Agent     │       │  Quote Agent             │       │ Sales Finalisation │
+ │                      │       │                          │       │       Agent        │
+ │   * check_inventory  │       │   * get_quote_history    │       │                    │
+ │   * check_stock_level│       │   * get_item_prices      │       │ * check_inventory  │
+ │                      │       │   * get_delivery_timeline│       │ * fulfill_order    │
+ └──────────────────────┘       └──────────────────────────┘       └────────────────────┘
+
+
+A Better Agentic Design
+=======================
+If I had more time, I would implement this project as follows.
+I don't believe there is a need in this project for multiple agents. None of the
+agents need to be custom (e.g. using fine-tuning), there are no resource or
+security requirements to use multiple agents and context is manageable.
+
+ ┌─────────────────┐     ┌─────────┐   Product Vector Database
+ │ Agent           │     │ Product │   is used to convert customer
+ │ * find_product  │   ┌── Vector  │   product names into our SKUs
+ │ * check_stock   │───┘ │ Database│
+ │ * create_quote  │     └─────────┘
+ │ * create_order  │     ┌────────┐
+ │ * find_quote    │──────SQL     │
+ │ * find_invoice  │     │Database│
+ │ * find_receipt  │     └────────┘
+ │ * get_balance   │─┐   ┌───────────┐
+ │ * message_staff │ └──┐│Customer   │
+ │                 │┐   └─Interaction│
+ ┴─────────────────│└─┐  │Database   │
+                      └┐ └───────────┘
+                       └─┬───────┐
+                         │  SSO  │
+- All tools use product  └───────┘
+  ids rather than names.
+- Today's date and
+  customer history is
+  always added to prompts
+
+A state diagram would be used. Ensure customer requests are categorized. If they are
+orders, these should be validated before processing. We need to verify only one sale is
+made per order. Sales need to be validated in a separate step before final processing.
