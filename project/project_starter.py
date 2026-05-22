@@ -1121,7 +1121,7 @@ def run_test_scenarios():
     print("Initializing Database...")
     init_database(db_engine)
     try:
-        quote_requests = pd.read_csv("quote_requests.csv")
+        quote_requests = pd.read_csv("quote_requests_sample.csv")
         quote_requests["request_date"] = pd.to_datetime(
             quote_requests["request_date"], format="%m/%d/%y", errors="coerce"
         )
