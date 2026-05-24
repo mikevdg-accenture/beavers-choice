@@ -922,7 +922,8 @@ def fulfill_order(
         item_name: The name of the item being ordered.
         quantity: The number of units in the order.
         price: The total price of the order.
-        transaction_date: The date of the transaction in ISO format (YYYY-MM-DD).
+        transaction_date: The date the customer placed the order (i.e. the request
+            date), in ISO format (YYYY-MM-DD). This is NOT the delivery date.
 
     Returns:
         A confirmation message including the transaction ID of the fulfilled order.
@@ -1015,7 +1016,10 @@ You do sales in two steps:
     1. You first verify the exact names of products using the check_inventory tool. If
        the product does not exist in our inventory, do not proceed with the sale but reply
        with an error saying that the given product could not be found.
-    2. You then finalise the sale using the fulfill_order tool.
+    2. You then finalise the sale using the fulfill_order tool. The `transaction_date`
+       passed to fulfill_order MUST be the request date (the date the customer placed
+       the order). NEVER pass the delivery date as the transaction date, even if a
+       delivery date has been mentioned in the conversation.
 All products in the sale must have their exact name in our inventory.
 Product names (item names) are case sensitive.""",
         )
