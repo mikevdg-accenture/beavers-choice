@@ -445,12 +445,12 @@ def get_quote(item_names: List[str]) -> Dict[str, ItemInfo]:
 
     # Build parameterized query for multiple items
     placeholders = ",".join([f":item_{i}" for i in range(len(item_names))])
-    params = {f"item_{i}": name for i, name in enumerate(item_names)}
+    params = {f"item_{i}": name.lower() for i, name in enumerate(item_names)}
 
     query = f"""
         SELECT item_name, unit_price
         FROM inventory
-        WHERE item_name IN ({placeholders})
+        WHERE lower(item_name) IN ({placeholders})
     """
 
     result = pd.read_sql(query, db_engine, params=params)
@@ -499,7 +499,7 @@ def get_stock_level(item_name: str, request_date: Union[str, datetime]) -> pd.Da
                 ELSE 0
             END), 0) AS current_stock
         FROM transactions
-        WHERE item_name = :item_name
+        WHERE lower(item_name) = lower(:item_name)
         AND transaction_date <= :request_date
     """
 
@@ -781,17 +781,27 @@ def check_inventory(request_date: str) -> str:
 
     Returns:
         A human-readable summary of all item quantities in inventory as of the given date.
+        Each item in the list is in the format:
+            [our name]: [quantity] units
+        Where [our name] is our exact name for that item in square brackets. This name is used
+        to match items specified by the customer.
 
     """
     inventory: Dict[str, int] = get_all_inventory(request_date)
     if not is_valid_iso8601_date(request_date):
-        return f"Invalid date format: '{request_date}'. Use YYYY-MM-DD."
+        result = f"Invalid date format: '{request_date}'. Use YYYY-MM-DD."
+        print(f"check_inventory result: {result}")
+        return result
     if not inventory:
-        return f"No inventory data found as of '{request_date}'."
+        result = f"No inventory data found as of '{request_date}'."
+        print(f"check_inventory result: {result}")
+        return result
     items_str = "\n".join(
-        f"  - {name}: {int(qty)} units" for name, qty in sorted(inventory.items())
+        f"  - [{name}]: {int(qty)} units" for name, qty in sorted(inventory.items())
     )
-    return f"Inventory as of '{request_date}':\n{items_str}"
+    result = f"Inventory as of '{request_date}':\n{items_str}"
+    print(f"check_inventory result: {result}")
+    return result
 
 
 @tool
@@ -807,12 +817,18 @@ def check_stock_level(item_name: str, request_date: str) -> str:
 
     """
     if not is_valid_iso8601_date(request_date):
-        return f"Invalid date format: '{request_date}'. Use YYYY-MM-DD."
+        result = f"Invalid date format: '{request_date}'. Use YYYY-MM-DD."
+        print(f"check_stock_level result: {result}")
+        return result
     result = get_stock_level(item_name, request_date)
     if result.empty or result.iloc[0]["current_stock"] == 0:
-        return f"No stock found for '{item_name}' as of '{request_date}', or the item does not exist in our system."
+        result = f"No stock found for '{item_name}' as of '{request_date}', or the item does not exist in our system."
+        print(f"check_stock_level result: {result}")
+        return result
     qty = int(result.iloc[0]["current_stock"])
-    return f"Stock level for '{item_name}' as of '{request_date}': {qty} units."
+    result = f"Stock level for '{item_name}' as of '{request_date}': {qty} units."
+    print(f"check_stock_level result: {result}")
+    return result
 
 
 # Tools for quoting agent
@@ -831,7 +847,9 @@ def get_item_prices(item_names: List[str]) -> str:
 
     """
     if not item_names:
-        return "No item names provided."
+        result = "No item names provided."
+        print(f"get_item_prices result: {result}")
+        return result
     prices = get_quote(item_names)
     lines = [f"Information for {len(prices)} item(s):"]
     for name in sorted(prices.keys()):
@@ -840,7 +858,9 @@ def get_item_prices(item_names: List[str]) -> str:
             lines.append(f"  - {name}: ${item_info.price:.2f}")
         else:
             lines.append(f"  - {name}: Not a valid item in our inventory.")
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    print(f"get_item_prices result: {result}")
+    return result
 
 
 @tool
@@ -884,7 +904,7 @@ def get_quote_history(search_terms: List[str]) -> str:
             f"\n  Explanation: {q['quote_explanation']}"
         )
     result = "\n".join(lines)
-    print(result)
+    print(f"get_quote_history result: {result}")
     return result
 
 
@@ -908,10 +928,12 @@ def get_delivery_timeline(order_date: str, quantity: int) -> str:
         str: Estimated delivery date in ISO format (YYYY-MM-DD).
     """
     delivery_date = get_supplier_delivery_date(order_date, quantity)
-    return (
+    result = (
         f"For an order of {quantity} unit(s) placed on {order_date}, "
         f"the estimated delivery date is {delivery_date}."
     )
+    print(f"get_delivery_timeline result: {result}")
+    return result
 
 
 @tool
@@ -934,8 +956,11 @@ def fulfill_order(
         transaction_id = create_transaction(
             item_name, "sales", quantity, price, transaction_date
         )
-        return f"Order successfully fulfilled for {quantity} unit(s) of '{item_name}' at ${price:.2f} total on {transaction_date}. Transaction ID: {transaction_id}."
+        result = f"Order successfully fulfilled for {quantity} unit(s) of '{item_name}' at ${price:.2f} total on {transaction_date}. Transaction ID: {transaction_id}."
+        print(f"fulfill_order result: {result}")
+        return result
     except Exception as e:
+        print(f"fulfill_order error: {str(e)}")
         return f"Failed to fulfill order: {str(e)}"
 
 
@@ -948,9 +973,14 @@ The request date MUST always be included when delegating tasks to team members.
 Item names are in the format "customer's name [our name]", e.g. "A4 glossy paper [Glossy paper]"
 where "A4 glossy paper" is the customer's description of one of our products, and "Glossy paper" is
 the exact match in our inventory database.
-When interacting with ALL team members, item names MUST be copied verbatim, including the customer's name AND our name in square brackets,
-if there is one.
-Always preserve the case of item names as they are case sensitive.
+
+The sentinel "[UNMATCHED]" is used in place of our item name (e.g. "100 egg containers [UNMATCHED]") to
+indicate that the item could not be matched to our inventory. In this case, do not bother attempting to
+create a quote, finalize a sale, use tools or use other agents for this particular item, but instead
+inform the customer  using a friendly tone that we do not stock this item.
+
+When interacting with ALL team members, item names MUST be copied verbatim, including the customer's name
+AND our name in square brackets. Always preserve the case of item names as they are case sensitive.
 
 When checking inventory for multiple items, check all items in a single request to the inventory team member.
 If the product is not available in our inventory, do not finalize a sale but rather repond politely to the customer
@@ -1009,7 +1039,7 @@ can be provided to the customer."""
 
 class ItemMatchingAgent(ToolCallingAgent):
     def __init__(self, model, tools):
-        instructions = """You are an item matching agent.
+        instructions = """You are an item matching agent for a paper company.
 
             Your role is to rewrite every incoming request, replacing the customer's item names
             with our items names exactly as they appear in our inventory.
@@ -1021,7 +1051,15 @@ class ItemMatchingAgent(ToolCallingAgent):
             is in the request, and our name is looked up using the `check_inventory` tool.
 
             The exact wording of our name in the square brackets MUST be an exact match for
-            an item in our inventory. Case MUST be preserved as item names are case sensitive.
+            an item in our inventory, or the sentinel "[UNMATCHED]".
+            Case MUST be preserved as item names are case sensitive.
+
+            Items in our inventory can be any size unless our name for that item specifies a size. For example,
+            "A4 glossy paper" becomes "A4 glossy paper [Glossy paper]" because our item "[Glossy paper]" can be
+            cut by us, a paper company, into any size.
+
+            Most items in our inventory can be any color. For example, "poster paper in various colors" becomes
+            "poster paper in various colors [Large poster paper]".
 
             Some examples. In the request:
             * "100 sheets of A4 glossy paper" in the request becomes "100 sheets of A4 glossy paper [Glossy paper]".
@@ -1029,10 +1067,6 @@ class ItemMatchingAgent(ToolCallingAgent):
             * "colored paper" becomes "colored paper [Bright-colored paper]".
             * "20 streamers" becomes "20 streamers [Party streamers]".
             * "500 sheets of A4 sized printer paper" becomes "500 sheets of A4 sized printer paper [A4 paper]".
-
-            If the size of the paper is not mentioned in our inventory names (e.g. "A4", "Letter") then our
-            item can be customised by us (a paper company) to the customer's requirements.
-            Items in our inventory can be any color unless specified by our item description.
         """
         super().__init__(
             model=model,
@@ -1078,14 +1112,28 @@ class QuoteAgent(ToolCallingAgent):
             name="quote",
             description="This team member generates quotes for products based on inventory availability. It requires exact product names from our inventory.",
             instructions="""You are a quote managing team member for the "Beaver's Choice" paper company.
-You are responsible for generating quotes for products based on inventory availability.
-If no request date is supplied, respond with a complaint about that.
-In both your responses and replies, ALWAYS use the format "customer's name [our name]", to refer to inventory items, e.g.
-"A4 glossy paper [Glossy paper]". ALWAYS keep the case on item names as they are case sensitive.
 
-When interacting with tools, use our name, which is the string in square brackets. For example, when asking about "A4 glossy paper [Glossy paper]", use the string "Glossy paper" in the tool invocation.
+If no request date is supplied, respond with a complaint about that.
+
+You generate quotes in this order:
+1. Call get_item_prices ONCE with the full list of items.
+2. Call get_delivery_timeline ONCE with the total quantity.
+3. (Optional) Call get_quote_history if you need precedent for discounts.
+4. Immediately produce your quote via final_answer.
 
 You can apply bulk discounts at will, to strategically encourage sales. When done so, reply with the amount of the bulk discount and the reason for it.
+
+Do NOT call the same tool twice for the same items. Once you have prices and a
+delivery date, you MUST call final_answer with:
+  - A line-by-line price breakdown using "customer's name [our name]" format.
+  - Any bulk discount you decide to apply, with reasoning.
+  - The delivery date.
+  - The total cost.
+
+In both your responses and replies, ALWAYS use the format "customer's name [our name]", to refer to inventory items, e.g.
+"A4 glossy paper [Glossy paper]". Item names are case sensitive.
+
+When interacting with tools, ONLY use "our name", which is the string in square brackets. For example, when asking about "A4 glossy paper [Glossy paper]", use the string "Glossy paper" in the tool invocation.
 """,
         )
 
@@ -1345,5 +1393,5 @@ Event type: {event}
 
 
 if __name__ == "__main__":
-    # run_one()
-    run_test_scenarios()
+    run_one()
+    # run_test_scenarios()
