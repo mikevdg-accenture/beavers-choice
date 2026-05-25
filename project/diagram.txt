@@ -1,10 +1,10 @@
-Current Multi-Agent Project Design
+Multi-Agent Project Design
 ==================================
 
-                                   ┌────────────────────┐    ┌────────────────────┐
-                                   │    Orchestrator    ┼────│    Sanitisation    │
-                                   │       Agent        │    │       Agent        │
-                                   └──────────┬─────────┘    └────────────────────┘
+     ┌────────────────────┐        ┌────────────────────┐    ┌────────────────────┐
+     │    Item Matching   ├──────🭬│    Orchestrator    ├───🭬│    Sanitisation    │
+     │       Agent        │        │       Agent        │    │       Agent        │
+     └────────────────────┘        └──────────┬─────────┘    └────────────────────┘
                                               │
             ┌─────────────────────────────────┼────────────────────────────────┐
  ┌──────────┴───────────┐       ┌─────────────┴────────────┐       ┌───────────┴────────┐
@@ -17,37 +17,3 @@ Current Multi-Agent Project Design
 
 The Sanitisation Agent is run manually for every response from the Orchestrator agent
 to validate that there is no PII or company sensitive information in the response.
-
-
-A Better Agentic Design
-=======================
-If I had more time, I would implement this project as follows.
-I don't believe there is a need in this project for multiple agents. None of the
-agents need to be custom (e.g. using fine-tuning), there are no resource or
-security requirements to use multiple agents and context is manageable.
-
- ┌─────────────────┐     ┌─────────┐   Product Vector Database
- │ Agent           │     │ Product │   is used to convert customer
- │ * find_product  │   ┌── Vector  │   product names into our SKUs
- │ * check_stock   │───┘ │ Database│
- │ * create_quote  │     └─────────┘
- │ * create_order  │     ┌────────┐
- │ * find_quote    │──────SQL     │
- │ * find_invoice  │     │Database│
- │ * find_receipt  │     └────────┘
- │ * get_balance   │─┐   ┌───────────┐
- │ * message_staff │ └──┐│Customer   │
- │                 │┐   └─Interaction│
- ┴─────────────────│└─┐  │Database   │
-                      └┐ └───────────┘
-                       └─┬───────┐
-                         │  SSO  │
-- All tools use product  └───────┘
-  ids rather than names.
-- Today's date and
-  customer history is
-  always added to prompts
-
-A state diagram would be used. Ensure customer requests are categorized. If they are
-orders, these should be validated before processing. We need to verify only one sale is
-made per order. Sales need to be validated in a separate step before final processing.
