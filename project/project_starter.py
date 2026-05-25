@@ -1252,5 +1252,5 @@ Event type: {event}
 
 
 if __name__ == "__main__":
-    run_one()
-    # run_test_scenarios()
+    # run_one()
+    run_test_scenarios()
