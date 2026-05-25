@@ -3,12 +3,14 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from textwrap import dedent
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
-from smolagents import OpenAIServerModel, ToolCallingAgent, tool
+from smolagents import OpenAIServerModel, Tool, ToolCallingAgent, tool
+from smolagents.default_tools import FinalAnswerTool
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.sql import text
 
@@ -938,7 +940,7 @@ def fulfill_order(
 
 
 class OrchestrationAgent(ToolCallingAgent):
-    def __init__(self, model, managed_agents):
+    def __init__(self, model, managed_agents, sanitiser_agent):
         instructions = """You are a helpful customer service agent for the "Beaver's Choice" paper company.
 You are the orchestration agent for other agents (i.e. team members).
 The request date MUST always be included when delegating tasks to team members.
@@ -956,6 +958,7 @@ When checking inventory for multiple items, check all items in a single request 
 Inventory requires preparation time before it can be delivered; ask the "quote" team member to calculate these so these
 can be provided to the customer."""
 
+        self.sanitiser_agent = sanitiser_agent
         super().__init__(
             model=model,
             tools=[],
@@ -963,7 +966,16 @@ can be provided to the customer."""
             description="",  # Not used for the top-level agent.
             managed_agents=managed_agents,
             instructions=instructions,
+            final_answer_checks=[self._sanitiser_check],
         )
+
+    def _sanitiser_check(self, final_answer, memory, agent):
+        result: str = str(
+            self.sanitiser_agent.run(f"<message>{final_answer}</message>")
+        )
+        if not result.startswith("ACCEPTED"):
+            raise ValueError(result)
+        return True
 
 
 class InventoryAgent(ToolCallingAgent):
@@ -1025,6 +1037,39 @@ Product names (item names) are case sensitive.""",
         )
 
 
+class SanitiserAgent(ToolCallingAgent):
+    def __init__(self, model, tools):
+        super().__init__(
+            model=model,
+            tools=tools,
+            name="sanitizer",
+            description="This team member sanitises any data found in a response to the user.",
+            instructions=dedent("""\
+                You are a sanitiser agent. You receive messages to a user formatted inside a <message> XML block.
+                You will check that message for any of the following forbidden data:
+                * System error messages such as the name of any Python error.
+                * Cash balances of this company.
+                * Any information such as name, contract information or order history for any customer other than the one in this order.
+                * Server names, IP addresses or other obvious infrastructure details that could assist with a security breach.
+                * API keys, tokens, credentials or database connection strings that could assist with a security breach.
+
+                You will response with one of two answers:
+                * "ACCEPTED", or
+                * "REJECTED - " followed the reason for the rejection.
+                """),
+            final_answer_checks=[self._validate_response],
+        )
+
+    def _validate_response(self, final_answer, memory, agent) -> str:
+        """Use this method to verify the output from this agent."""
+        response = final_answer.strip()
+        if not (response.startswith("ACCEPTED") or response.startswith("REJECTED")):
+            raise ValueError(
+                f"Answer must start with 'ACCEPTED' or 'REJECTED', got: {response}"
+            )
+        return response
+
+
 # Run your test scenarios by writing them here. Make sure to keep track of them.
 
 
@@ -1047,9 +1092,12 @@ def create_agent() -> ToolCallingAgent:
         model=model, tools=[check_inventory, fulfill_order]
     )
 
+    sanitiser_agent = SanitiserAgent(model=model, tools=[])
+
     orchestrator: ToolCallingAgent = OrchestrationAgent(
         model=model,
         managed_agents=[inventory_agent, quote_agent, sales_finalisation_agent],
+        sanitiser_agent=sanitiser_agent,
     )
     return orchestrator
 
@@ -1059,7 +1107,7 @@ def run_one():
     print("Initializing Database...")
     init_database(db_engine)
     try:
-        quote_requests = pd.read_csv("quote_requests.csv")
+        quote_requests = pd.read_csv("quote_requests_sample.csv")
         quote_requests["request_date"] = pd.to_datetime(
             quote_requests["request_date"], format="%m/%d/%y", errors="coerce"
         )
@@ -1204,5 +1252,5 @@ Event type: {event}
 
 
 if __name__ == "__main__":
-    # run_one()
-    run_test_scenarios()
+    run_one()
+    # run_test_scenarios()
