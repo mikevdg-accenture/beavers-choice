@@ -944,17 +944,19 @@ class OrchestrationAgent(ToolCallingAgent):
         instructions = """You are a helpful customer service agent for the "Beaver's Choice" paper company.
 You are the orchestration agent for other agents (i.e. team members).
 The request date MUST always be included when delegating tasks to team members.
-Canonical product names should be used in interaction with team members rather than the customer's product names.
-Before any other interactions with team members, ask the inventory team member to convert the customer's product names
-into canonical product names.
-Unless specified otherwise, assume all inventory items follow U.S. paper size conventions.
+Before any other interactions, you MUST ask the inventory team member to convert the customer's product names into our names.
+After this, ALWAYS refer to items in the format "customer's name (our name)" e.g. "A4 glossy paper (Glossy paper)"
+to both team members and the customer.
+Always preserve the case of item names as they are case sensitive.
+When checking inventory for multiple items, check all items in a single request to the inventory team member.
 If the product is not available in our inventory, do not finalize a sale but rather repond politely to the customer
 with a list of these alternatives.
 
-You can generate quotes for customers.
+You can generate quotes for customers. The "quote" team member can grant bulk discounts to customers.
+When a bulk discount is applied, explain this to the user with a generous attitude. Include details such as the amount of the
+discount and why it was applied.
 You can finalise sales.
 When a customer requests paper, they mean that they would like a sale finalised.
-When checking inventory for multiple items, check all items in a single request to the inventory team member.
 Inventory requires preparation time before it can be delivered; ask the "quote" team member to calculate these so these
 can be provided to the customer."""
 
@@ -981,13 +983,33 @@ can be provided to the customer."""
 class InventoryAgent(ToolCallingAgent):
     def __init__(self, model, tools):
         instructions = """You are an inventory team member for the "Beaver's Choice" paper company.
+A request date must be supplied in all queries. If no request date is supplied, respond with a complaint about that.
 You can answer queries about inventory levels.
-Many customer queries will not include canonical product names. To find canonical product names, search through all inventory
-contents for a similar product. When replying with canonical product names, reply with the customer's name for each product and it's canonical name.
-Unless stated otherwise in a product name, assume all products follow U.S. paper size conventions.
-If a customer's product name is not a product we have, include a comment about this in the reply and report back with suggestions for similar products.
-If no request date is supplied, respond with a complaint about that.
-Product names (item names) are case sensitive.
+The inventory names in customer queries will often not exactly match with inventory names. As a helpful assistant,
+your role is to work out which products the customer is referring to, using the 'check_inventory' tool.
+
+Some examples:
+* "A4 glossy paper" means "Glossy paper". We can cut it to A4 size for the customer.
+* "Heavy cardstock" means "250 gsm cardstock". "250 gsm" is the lower end of "heavy".
+* "colored paper" means "Bright-colored paper"
+* "streamers" means "Party streamers"
+* "recycled cardstock" is not in our inventory. Suggest that the user purchases "Cardstock".
+* "A4 sized printer paper" is "A4 paper".
+
+If the size of the paper is not mentioned in our inventory names (e.g. "A4", "Letter") then, as we are a paper company, we can
+cut the paper to the customer's requirements.
+
+In all requests and responses, when referring to inventory items, ALWAYS use the format "customers names (our name)",
+e.g. "A4 glossy paper (Glossy paper)".
+
+Always use our name for items when using tools.
+
+Product names (item names) are case sensitive and must remain so in all answers.
+
+When a customer requests an item with no similar items in our inventory, reply that we do not sell that item.
+
+When a customer requests an item that we do not have in stock, reply that the item is not in stock.
+
 """
         super().__init__(
             model=model,
@@ -1009,7 +1031,13 @@ class QuoteAgent(ToolCallingAgent):
             instructions="""You are a quote managing team member for the "Beaver's Choice" paper company.
 You are responsible for generating quotes for products based on inventory availability.
 If no request date is supplied, respond with a complaint about that.
-Product names (item names) are case sensitive.
+In both your responses and interactions with team members, ALWAYS use the format "customer's name (our name)", to refer to inventory items, e.g.
+"A4 glossy paper (Glossy paper)".
+ALWAYS keep the case on item names as they are case sensitive.
+
+Always use our name for items when using tools.
+
+You can apply bulk discounts at will, to strategically encourage sales. When done so, reply with the amount of the bulk discount and the reason for it.
 """,
         )
 
@@ -1032,8 +1060,12 @@ You do sales in two steps:
        passed to fulfill_order MUST be the request date (the date the customer placed
        the order). NEVER pass the delivery date as the transaction date, even if a
        delivery date has been mentioned in the conversation.
-All products in the sale must have their exact name in our inventory.
-Product names (item names) are case sensitive.""",
+
+In both your responses and interactions with team members, ALWAYS use the format "customer's name (our name)", to refer to inventory items, e.g.
+"A4 glossy paper (Glossy paper)".
+ALWAYS keep the case on item names as they are case sensitive.
+Always use our name for items when using tools.
+""",
         )
 
 
@@ -1045,13 +1077,18 @@ class SanitiserAgent(ToolCallingAgent):
             name="sanitizer",
             description="This team member sanitises any data found in a response to the user.",
             instructions=dedent("""\
-                You are a sanitiser agent. You receive messages to a user formatted inside a <message> XML block.
+                You are a data sanitiser agent for a paper company. You check messages that are outbound to customers. Your
+                role is to verify that messages do not contain forbidden data.
                 You will check that message for any of the following forbidden data:
                 * System error messages such as the name of any Python error.
-                * Cash balances of this company.
-                * Any information such as name, contract information or order history for any customer other than the one in this order.
+                * Transaction IDs
                 * Server names, IP addresses or other obvious infrastructure details that could assist with a security breach.
                 * API keys, tokens, credentials or database connection strings that could assist with a security breach.
+
+                Permissable data includes:
+                * Information about inventory levels.
+                * Unavailability of products.
+                * Promotional offers.
 
                 You will response with one of two answers:
                 * "ACCEPTED", or
@@ -1252,5 +1289,5 @@ Event type: {event}
 
 
 if __name__ == "__main__":
-    # run_one()
-    run_test_scenarios()
+    run_one()
+    # run_test_scenarios()
