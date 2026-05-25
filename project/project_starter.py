@@ -977,14 +977,15 @@ the exact match in our inventory database.
 The sentinel "[UNMATCHED]" is used in place of our item name (e.g. "100 egg containers [UNMATCHED]") to
 indicate that the item could not be matched to our inventory. In this case, do not bother attempting to
 create a quote, finalize a sale, use tools or use other agents for this particular item, but instead
-inform the customer  using a friendly tone that we do not stock this item.
+inform the customer using a friendly tone that we do not stock this item and suggest a similar alternative
+(delegate this to the inventory team member).
+
+Remove all "[UNMATCHED]" sentinels from the final response.
 
 When interacting with ALL team members, item names MUST be copied verbatim, including the customer's name
 AND our name in square brackets. Always preserve the case of item names as they are case sensitive.
 
 When checking inventory for multiple items, check all items in a single request to the inventory team member.
-If the product is not available in our inventory, do not finalize a sale but rather repond politely to the customer
-with a list of these alternatives.
 
 You can generate quotes for customers. The "quote" team member can grant bulk discounts to customers.
 When a bulk discount is applied, explain this to the user with a generous attitude. Include details such as the amount of the
@@ -1029,6 +1030,10 @@ can be provided to the customer."""
         )
 
     def _sanitiser_check(self, final_answer, memory, agent):
+        if "[UNMATCHED]" in final_answer:
+            raise ValueError(
+                "[UNMATCHED] sentinel found in final answer. Please remove it and try again."
+            )
         result: str = str(
             self.sanitiser_agent.run(f"<message>{final_answer}</message>")
         )
@@ -1038,6 +1043,7 @@ can be provided to the customer."""
 
 
 class ItemMatchingAgent(ToolCallingAgent):
+    # I'm struggling to get gpt-4o-mini to match items correctly.
     def __init__(self, model, tools):
         instructions = """You are an item matching agent for a paper company.
 
@@ -1064,9 +1070,13 @@ class ItemMatchingAgent(ToolCallingAgent):
             Some examples. In the request:
             * "100 sheets of A4 glossy paper" in the request becomes "100 sheets of A4 glossy paper [Glossy paper]".
             * "50 sheets of Heavy cardstock" becomes "50 sheets of Heavy cardstock [250 gsm cardstock]".
-            * "colored paper" becomes "colored paper [Bright-colored paper]".
             * "20 streamers" becomes "20 streamers [Party streamers]".
             * "500 sheets of A4 sized printer paper" becomes "500 sheets of A4 sized printer paper [A4 paper]".
+            * "500 sheets of A4 matte paper" becomes "500 sheets of A4 matte paper [Matte paper]".
+            * "100 sheets of A4 recycled paper" becomes "100 sheets of A4 recycled paper [Recycled paper]".
+            * "5,000 sheets of A3 colored paper (assorted colors)" becomes "5,000 sheets of A3 colored paper (assorted colors) [Colored paper]"
+            * "200 sheets of colored paper in assorted colors" becomes "200 sheets of colored paper in assorted colors [Colored paper]".
+            * "1500 sheets of A3 matte paper" becomes "1500 sheets of A3 matte paper [Matte paper]"
         """
         super().__init__(
             model=model,
@@ -1393,5 +1403,5 @@ Event type: {event}
 
 
 if __name__ == "__main__":
-    run_one()
-    # run_test_scenarios()
+    # run_one()
+    run_test_scenarios()
