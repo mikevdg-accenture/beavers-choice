@@ -940,14 +940,18 @@ def fulfill_order(
 
 
 class OrchestrationAgent(ToolCallingAgent):
-    def __init__(self, model, managed_agents, sanitiser_agent):
+    def __init__(self, model, managed_agents, matching_agent, sanitiser_agent):
         instructions = """You are a helpful customer service agent for the "Beaver's Choice" paper company.
 You are the orchestration agent for other agents (i.e. team members).
 The request date MUST always be included when delegating tasks to team members.
-Before any other interactions, you MUST ask the inventory team member to convert the customer's product names into our names.
-After this, ALWAYS refer to items in the format "customer's name (our name)" e.g. "A4 glossy paper (Glossy paper)"
-to both team members and the customer.
+
+Item names are in the format "customer's name [our name]", e.g. "A4 glossy paper [Glossy paper]"
+where "A4 glossy paper" is the customer's description of one of our products, and "Glossy paper" is
+the exact match in our inventory database.
+When interacting with ALL team members, item names MUST be copied verbatim, including the customer's name AND our name in square brackets,
+if there is one.
 Always preserve the case of item names as they are case sensitive.
+
 When checking inventory for multiple items, check all items in a single request to the inventory team member.
 If the product is not available in our inventory, do not finalize a sale but rather repond politely to the customer
 with a list of these alternatives.
@@ -960,6 +964,7 @@ When a customer requests paper, they mean that they would like a sale finalised.
 Inventory requires preparation time before it can be delivered; ask the "quote" team member to calculate these so these
 can be provided to the customer."""
 
+        self.matching_agent = matching_agent
         self.sanitiser_agent = sanitiser_agent
         super().__init__(
             model=model,
@@ -971,6 +976,28 @@ can be provided to the customer."""
             final_answer_checks=[self._sanitiser_check],
         )
 
+    def run(
+        self,
+        task: str,
+        stream: bool = False,
+        reset: bool = True,
+        images: list["PIL.Image.Image"] | None = None,
+        additional_args: dict | None = None,
+        max_steps: int | None = None,
+        return_full_result: bool | None = None,
+    ):
+        task2 = self.matching_agent.run(f"<request>{task}</request>")
+        print(f"Matching: {task2}")
+        return super().run(
+            task2,
+            stream=stream,
+            reset=reset,
+            images=images,
+            additional_args=additional_args,
+            max_steps=max_steps,
+            return_full_result=return_full_result,
+        )
+
     def _sanitiser_check(self, final_answer, memory, agent):
         result: str = str(
             self.sanitiser_agent.run(f"<message>{final_answer}</message>")
@@ -980,31 +1007,53 @@ can be provided to the customer."""
         return True
 
 
+class ItemMatchingAgent(ToolCallingAgent):
+    def __init__(self, model, tools):
+        instructions = """You are an item matching agent.
+
+            Your role is to rewrite every incoming request, replacing the customer's item names
+            with our items names exactly as they appear in our inventory.
+
+            The request is surrounded by <request> XML tags.
+
+            Repeat the ENTIRE request verbatim, but replace all the items mentioned in the request
+            with a string of the format "customer's name [our name]", where the customer's name
+            is in the request, and our name is looked up using the `check_inventory` tool.
+
+            The exact wording of our name in the square brackets MUST be an exact match for
+            an item in our inventory. Case MUST be preserved as item names are case sensitive.
+
+            Some examples. In the request:
+            * "100 sheets of A4 glossy paper" in the request becomes "100 sheets of A4 glossy paper [Glossy paper]".
+            * "50 sheets of Heavy cardstock" becomes "50 sheets of Heavy cardstock [250 gsm cardstock]".
+            * "colored paper" becomes "colored paper [Bright-colored paper]".
+            * "20 streamers" becomes "20 streamers [Party streamers]".
+            * "500 sheets of A4 sized printer paper" becomes "500 sheets of A4 sized printer paper [A4 paper]".
+
+            If the size of the paper is not mentioned in our inventory names (e.g. "A4", "Letter") then our
+            item can be customised by us (a paper company) to the customer's requirements.
+            Items in our inventory can be any color unless specified by our item description.
+        """
+        super().__init__(
+            model=model,
+            tools=tools,
+            name="item_matching",
+            description="""This team member converts customer item names into our item names..""",
+            instructions=instructions,
+        )
+
+
 class InventoryAgent(ToolCallingAgent):
     def __init__(self, model, tools):
         instructions = """You are an inventory team member for the "Beaver's Choice" paper company.
 A request date must be supplied in all queries. If no request date is supplied, respond with a complaint about that.
 You can answer queries about inventory levels.
-The inventory names in customer queries will often not exactly match with inventory names. As a helpful assistant,
-your role is to work out which products the customer is referring to, using the 'check_inventory' tool.
 
-Some examples:
-* "A4 glossy paper" means "Glossy paper". We can cut it to A4 size for the customer.
-* "Heavy cardstock" means "250 gsm cardstock". "250 gsm" is the lower end of "heavy".
-* "colored paper" means "Bright-colored paper"
-* "streamers" means "Party streamers"
-* "recycled cardstock" is not in our inventory. Suggest that the user purchases "Cardstock".
-* "A4 sized printer paper" is "A4 paper".
+In all requests and responses, when referring to inventory items, ALWAYS use the format "customers names [our name]",
+e.g. "A4 glossy paper [Glossy paper]". Requests should have these pre-populated.
+ALWAYS use our name (the name in square brackets) for items when using tools. ALWAYS preserve case sensitivity.
 
-If the size of the paper is not mentioned in our inventory names (e.g. "A4", "Letter") then, as we are a paper company, we can
-cut the paper to the customer's requirements.
-
-In all requests and responses, when referring to inventory items, ALWAYS use the format "customers names (our name)",
-e.g. "A4 glossy paper (Glossy paper)".
-
-Always use our name for items when using tools.
-
-Product names (item names) are case sensitive and must remain so in all answers.
+When interacting with tools, use our name, which is the string in square brackets. For example, when asking about "A4 glossy paper [Glossy paper]", use the string "Glossy paper" in the tool invocation.
 
 When a customer requests an item with no similar items in our inventory, reply that we do not sell that item.
 
@@ -1031,11 +1080,10 @@ class QuoteAgent(ToolCallingAgent):
             instructions="""You are a quote managing team member for the "Beaver's Choice" paper company.
 You are responsible for generating quotes for products based on inventory availability.
 If no request date is supplied, respond with a complaint about that.
-In both your responses and interactions with team members, ALWAYS use the format "customer's name (our name)", to refer to inventory items, e.g.
-"A4 glossy paper (Glossy paper)".
-ALWAYS keep the case on item names as they are case sensitive.
+In both your responses and replies, ALWAYS use the format "customer's name [our name]", to refer to inventory items, e.g.
+"A4 glossy paper [Glossy paper]". ALWAYS keep the case on item names as they are case sensitive.
 
-Always use our name for items when using tools.
+When interacting with tools, use our name, which is the string in square brackets. For example, when asking about "A4 glossy paper [Glossy paper]", use the string "Glossy paper" in the tool invocation.
 
 You can apply bulk discounts at will, to strategically encourage sales. When done so, reply with the amount of the bulk discount and the reason for it.
 """,
@@ -1061,10 +1109,12 @@ You do sales in two steps:
        the order). NEVER pass the delivery date as the transaction date, even if a
        delivery date has been mentioned in the conversation.
 
-In both your responses and interactions with team members, ALWAYS use the format "customer's name (our name)", to refer to inventory items, e.g.
-"A4 glossy paper (Glossy paper)".
+In both your responses and replies, ALWAYS use the format "customer's name [our name]", to refer to inventory items, e.g.
+"A4 glossy paper [Glossy paper]".
 ALWAYS keep the case on item names as they are case sensitive.
-Always use our name for items when using tools.
+
+When interacting with tools, use our name, which is the string in square brackets. For example, when asking about "A4 glossy paper [Glossy paper]", use the string "Glossy paper" in the tool invocation.
+
 """,
         )
 
@@ -1131,9 +1181,15 @@ def create_agent() -> ToolCallingAgent:
 
     sanitiser_agent = SanitiserAgent(model=model, tools=[])
 
+    matching_agent = ItemMatchingAgent(
+        model=model,
+        tools=[check_inventory],
+    )
+
     orchestrator: ToolCallingAgent = OrchestrationAgent(
         model=model,
         managed_agents=[inventory_agent, quote_agent, sales_finalisation_agent],
+        matching_agent=matching_agent,
         sanitiser_agent=sanitiser_agent,
     )
     return orchestrator
@@ -1289,5 +1345,5 @@ Event type: {event}
 
 
 if __name__ == "__main__":
-    run_one()
-    # run_test_scenarios()
+    # run_one()
+    run_test_scenarios()
