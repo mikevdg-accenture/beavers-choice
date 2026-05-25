@@ -1,10 +1,10 @@
 Current Multi-Agent Project Design
 ==================================
 
-                                   ┌────────────────────┐
-                                   │    Orchestrator    │
-                                   │       Agent        │
-                                   └──────────┬─────────┘
+                                   ┌────────────────────┐    ┌────────────────────┐
+                                   │    Orchestrator    ┼────│    Sanitisation    │
+                                   │       Agent        │    │       Agent        │
+                                   └──────────┬─────────┘    └────────────────────┘
                                               │
             ┌─────────────────────────────────┼────────────────────────────────┐
  ┌──────────┴───────────┐       ┌─────────────┴────────────┐       ┌───────────┴────────┐
@@ -14,6 +14,9 @@ Current Multi-Agent Project Design
  │   * check_stock_level│       │   * get_item_prices      │       │ * check_inventory  │
  │                      │       │   * get_delivery_timeline│       │ * fulfill_order    │
  └──────────────────────┘       └──────────────────────────┘       └────────────────────┘
+
+The Sanitisation Agent is run manually for every response from the Orchestrator agent
+to validate that there is no PII or company sensitive information in the response.
 
 
 A Better Agentic Design
