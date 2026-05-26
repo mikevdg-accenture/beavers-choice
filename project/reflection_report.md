@@ -6,7 +6,7 @@ My main learning experience has been how profoundly difficult it is to get an AI
 
 ## Workflow explanation
 
-For this project, an Inventory agent, Quote agent, and Sales Finalisation agent were added. For coordination and interaction with the customer, an over-arching Orchestration agent was added.
+For this project, an Inventory agent and Sales agent were added. For coordination and interaction with the customer, an over-arching Orchestration agent was added. Later, an Item Matching agent was added to work around problems with item matching, and a sanisation agent as a result of project feedback on the first submission.
 
 The Orchestration agent is provided with no tools and must delegate to other agents. Each agent is provided with an adequate description which is provided to the Orchestration agent by the `smolagents` framework. 
 
