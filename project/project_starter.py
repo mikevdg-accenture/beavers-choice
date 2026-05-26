@@ -987,12 +987,12 @@ AND our name in square brackets. Always preserve the case of item names as they 
 
 When checking inventory for multiple items, check all items in a single request to the inventory team member.
 
-You can generate quotes for customers. The "quote" team member can grant bulk discounts to customers.
+You can generate quotes for customers. The "sales" team member can grant bulk discounts to customers.
 When a bulk discount is applied, explain this to the user with a generous attitude. Include details such as the amount of the
 discount and why it was applied.
-You can finalise sales.
+You can finalise sales by working with the "sales" team member.
 When a customer requests paper, they mean that they would like a sale finalised.
-Inventory requires preparation time before it can be delivered; ask the "quote" team member to calculate these so these
+Inventory requires preparation time before it can be delivered; ask the "sales" team member to calculate these so these
 can be provided to the customer."""
 
         self.matching_agent = matching_agent
@@ -1114,14 +1114,16 @@ When a customer requests an item that we do not have in stock, reply that the it
         )
 
 
-class QuoteAgent(ToolCallingAgent):
+class SalesAgent(ToolCallingAgent):
     def __init__(self, model, tools):
         super().__init__(
             model=model,
             tools=tools,
-            name="quote",
-            description="This team member generates quotes for products based on inventory availability. It requires exact product names from our inventory.",
-            instructions="""You are a quote managing team member for the "Beaver's Choice" paper company.
+            name="sales",
+            description="This team member generates quotes for products based on inventory availability, and finalises sales. It requires exact product names from our inventory.",
+            instructions="""You are a sales and quotes managing team member for the "Beaver's Choice" paper company.
+
+You are responsible for generating quotes and finalising sales orders.
 
 If no request date is supplied, respond with a complaint about that.
 
@@ -1130,6 +1132,15 @@ You generate quotes in this order:
 2. Call get_delivery_timeline ONCE with the total quantity.
 3. (Optional) Call get_quote_history if you need precedent for discounts.
 4. Immediately produce your quote via final_answer.
+
+You do sales in two steps:
+    1. You first verify the exact names of products using the check_inventory tool. If
+       the product does not exist in our inventory, do not proceed with the sale but reply
+       with an error saying that the given product could not be found.
+    2. You then finalise the sale using the fulfill_order tool. The `transaction_date`
+       passed to fulfill_order MUST be the request date (the date the customer placed
+       the order). NEVER pass the delivery date as the transaction date, even if a
+       delivery date has been mentioned in the conversation.
 
 You can apply bulk discounts at will, to strategically encourage sales. When done so, reply with the amount of the bulk discount and the reason for it.
 
@@ -1144,35 +1155,6 @@ In both your responses and replies, ALWAYS use the format "customer's name [our 
 "A4 glossy paper [Glossy paper]". Item names are case sensitive.
 
 When interacting with tools, ONLY use "our name", which is the string in square brackets. For example, when asking about "A4 glossy paper [Glossy paper]", use the string "Glossy paper" in the tool invocation.
-""",
-        )
-
-
-class SalesFinalisationAgent(ToolCallingAgent):
-    def __init__(self, model, tools):
-        super().__init__(
-            model=model,
-            tools=tools,
-            name="sales_finalisation",
-            description="This team member finalises sales orders by updating inventory and generating invoices.",
-            instructions="""You are a sales team member for the "Beaver's Choice" paper company.
-You are responsible for finalising sales orders.
-If no request date is supplied, respond with a complaint about that.
-You do sales in two steps:
-    1. You first verify the exact names of products using the check_inventory tool. If
-       the product does not exist in our inventory, do not proceed with the sale but reply
-       with an error saying that the given product could not be found.
-    2. You then finalise the sale using the fulfill_order tool. The `transaction_date`
-       passed to fulfill_order MUST be the request date (the date the customer placed
-       the order). NEVER pass the delivery date as the transaction date, even if a
-       delivery date has been mentioned in the conversation.
-
-In both your responses and replies, ALWAYS use the format "customer's name [our name]", to refer to inventory items, e.g.
-"A4 glossy paper [Glossy paper]".
-ALWAYS keep the case on item names as they are case sensitive.
-
-When interacting with tools, use our name, which is the string in square brackets. For example, when asking about "A4 glossy paper [Glossy paper]", use the string "Glossy paper" in the tool invocation.
-
 """,
         )
 
@@ -1229,12 +1211,16 @@ def create_agent() -> ToolCallingAgent:
     inventory_agent = InventoryAgent(
         model=model, tools=[check_inventory, check_stock_level]
     )
-    quote_agent = QuoteAgent(
+
+    quote_agent = SalesAgent(
         model=model,
-        tools=[get_quote_history, get_item_prices, get_delivery_timeline],
-    )
-    sales_finalisation_agent = SalesFinalisationAgent(
-        model=model, tools=[check_inventory, fulfill_order]
+        tools=[
+            get_quote_history,
+            get_item_prices,
+            get_delivery_timeline,
+            check_inventory,
+            fulfill_order,
+        ],
     )
 
     sanitiser_agent = SanitiserAgent(model=model, tools=[])
@@ -1246,7 +1232,7 @@ def create_agent() -> ToolCallingAgent:
 
     orchestrator: ToolCallingAgent = OrchestrationAgent(
         model=model,
-        managed_agents=[inventory_agent, quote_agent, sales_finalisation_agent],
+        managed_agents=[inventory_agent, quote_agent],
         matching_agent=matching_agent,
         sanitiser_agent=sanitiser_agent,
     )

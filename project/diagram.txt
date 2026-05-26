@@ -6,14 +6,17 @@ Multi-Agent Project Design
      │       Agent        │        │       Agent        │    │       Agent        │
      └────────────────────┘        └──────────┬─────────┘    └────────────────────┘
                                               │
-            ┌─────────────────────────────────┼────────────────────────────────┐
- ┌──────────┴───────────┐       ┌─────────────┴────────────┐       ┌───────────┴────────┐
- │  Inventory Agent     │       │  Quote Agent             │       │ Sales Finalisation │
- │                      │       │                          │       │       Agent        │
- │   * check_inventory  │       │   * get_quote_history    │       │                    │
- │   * check_stock_level│       │   * get_item_prices      │       │ * check_inventory  │
- │                      │       │   * get_delivery_timeline│       │ * fulfill_order    │
- └──────────────────────┘       └──────────────────────────┘       └────────────────────┘
+            ┌─────────────────────────────────┼
+ ┌──────────┴───────────┐       ┌─────────────┴────────────┐
+ │  Inventory Agent     │       │  Sales Agent             │
+ │                      │       │                          │
+ │   * check_inventory  │       │   * get_quote_history    │
+ │   * check_stock_level│       │   * get_item_prices      │
+ │                      │       │   * get_delivery_timeline│
+ └──────────────────────┘       │   * check_inventory      │
+                                │   * fulfill_order        │
+                                └──────────────────────────┘
+
 
 The Sanitisation Agent is run manually for every response from the Orchestrator agent
 to validate that there is no PII or company sensitive information in the response.
